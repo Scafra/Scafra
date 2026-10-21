@@ -150,10 +150,35 @@ logging, discovering components, creating application resources, or binding
 the HTTP listener. Security, request timeout, and resource-limit values are
 therefore taken from the same resolved configuration.
 
-Typed `Properties<T>` environment overrides are a separate issue tracked by
-[#78](https://github.com/Scafra/Scafra/issues/78). This source-resolution
-change keeps Scafra's existing environment parser and does not include that
-independent schema-root fix.
+## Typed properties
+
+`Properties<T>` uses the same source selection and precedence chain above.
+The serialized `T::default()` supplies defaults and the environment path
+schema, nested under `#[config(prefix = "...")]`. An empty prefix loads from
+the configuration root. Partial files retain defaults for omitted fields.
+
+```rust
+use scafra::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Default, Deserialize, Serialize, Config)]
+#[config(prefix = "mail")]
+struct MailProperties {
+    host: String,
+}
+
+// With SCAFRA_MAIL_HOST=smtp.example.test in the process environment:
+let mail = Properties::<MailProperties>::new().load()?;
+assert_eq!(mail.host, "smtp.example.test");
+```
+
+Environment values override base and profile files; an explicit
+`.override_value("mail.host", "smtp.internal.test")` on the loader wins last.
+Use `.env_prefix("MYAPP")` for a custom environment namespace, such as
+`MYAPP_MAIL_HOST`. Nested fields and names containing underscores use the same
+schema-aware resolver as `ConfigLoader::load<T>()`. Unknown, ambiguous, and
+duplicate environment paths fail loading, and typed deserialization and
+`Config::validate` run before properties are returned.
 
 ## BootUI
 
