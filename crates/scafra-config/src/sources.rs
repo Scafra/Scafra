@@ -188,7 +188,7 @@ impl ConfigLoader {
     where
         T: DeserializeOwned + Serialize + Default,
     {
-        let (merged, origins, _) = self.load_merged::<T>()?;
+        let (merged, origins, _) = self.load_merged::<T>("")?;
         serde_yaml::from_value(merged).map_err(|error| decode_error(error, &origins))
     }
 
@@ -197,7 +197,7 @@ impl ConfigLoader {
     where
         T: DeserializeOwned + Serialize + Default,
     {
-        let (merged, origins, profile) = self.load_merged::<T>()?;
+        let (merged, origins, profile) = self.load_merged::<T>("")?;
         let config =
             serde_yaml::from_value(merged).map_err(|error| decode_error(error, &origins))?;
         Ok((config, profile.unwrap_or_else(|| "default".to_owned())))
@@ -208,7 +208,7 @@ impl ConfigLoader {
         T: ConfigProperties + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let (merged, origins, _) = self.load_merged::<serde_yaml::Value>()?;
+        let (merged, origins, _) = self.load_merged::<T>(T::CONFIG_PREFIX)?;
         let value = if T::CONFIG_PREFIX.is_empty() {
             merged
         } else {
@@ -233,12 +233,21 @@ impl ConfigLoader {
         Ok(config)
     }
 
-    fn load_merged<T>(&self) -> Result<MergedConfiguration, ConfigError>
+    fn load_merged<T>(&self, prefix: &str) -> Result<MergedConfiguration, ConfigError>
     where
         T: Serialize + Default,
     {
         let source = self.resolve_source()?;
-        let schema = serde_yaml::to_value(T::default()).map_err(|_| ConfigError::Serialize)?;
+        let mut schema = serde_yaml::to_value(T::default()).map_err(|_| ConfigError::Serialize)?;
+        // Properties own a subtree; both defaults and environment resolution
+        // must use the same fully qualified paths as files and overrides.
+        if !prefix.is_empty() {
+            for segment in prefix.split('.').rev() {
+                let mut parent = serde_yaml::Mapping::new();
+                parent.insert(serde_yaml::Value::String(segment.to_owned()), schema);
+                schema = serde_yaml::Value::Mapping(parent);
+            }
+        }
         let mut merged = schema.clone();
         let mut origins = BTreeMap::new();
         self.merge_base_sources(&mut merged, &mut origins, &source)?;
