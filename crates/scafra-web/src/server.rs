@@ -169,7 +169,7 @@ pub async fn serve_on_with_policy(
 ) -> Result<ServerOutcome, ServerError> {
     serve_on_with_signal(
         address,
-        shutdown_signal(),
+        (shutdown_signal(), None),
         policy,
         scafra_actuator::ActuatorConfig::default(),
         scafra_security::SecurityConfig::default(),
@@ -191,7 +191,7 @@ where
 {
     serve_on_with_signal(
         address,
-        async move { Ok(shutdown.await) },
+        (async move { Ok(shutdown.await) }, None),
         policy,
         scafra_actuator::ActuatorConfig::default(),
         scafra_security::SecurityConfig::default(),
@@ -264,9 +264,41 @@ pub async fn serve_on_with_policy_and_actuator_and_security_and_request_timeout_
 where
     F: FnOnce(ShutdownReason) + Send + 'static,
 {
+    serve_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks(
+        address,
+        policy,
+        actuator,
+        security,
+        request_timeout,
+        (on_shutdown_requested, || {}),
+    )
+    .await
+}
+
+/// Serves the registered application and invokes `on_server_started` after
+/// the HTTP listener binds. The shutdown callback runs before request draining.
+#[doc(hidden)]
+pub async fn serve_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks<
+    F,
+    S,
+>(
+    address: SocketAddr,
+    policy: ShutdownPolicy,
+    actuator: scafra_actuator::ActuatorConfig,
+    security: scafra_security::SecurityConfig,
+    request_timeout: Option<Duration>,
+    callbacks: (F, S),
+) -> Result<ServerOutcome, ServerError>
+where
+    F: FnOnce(ShutdownReason) + Send + 'static,
+    S: FnOnce() + Send + 'static,
+{
     serve_on_with_signal(
         address,
-        shutdown_with_callback(shutdown_signal(), on_shutdown_requested),
+        (
+            shutdown_with_callback(shutdown_signal(), callbacks.0),
+            Some(Box::new(callbacks.1) as Box<dyn FnOnce() + Send>),
+        ),
         policy,
         actuator,
         security,
@@ -314,9 +346,43 @@ pub async fn serve_router_on_with_policy_and_actuator_and_security_and_request_t
 where
     F: FnOnce(ShutdownReason) + Send + 'static,
 {
+    serve_router_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks(
+        address,
+        policy,
+        actuator,
+        security,
+        request_timeout,
+        router,
+        (on_shutdown_requested, || {}),
+    )
+    .await
+}
+
+/// Serves a typed application router, invokes `on_server_started` after the
+/// listener binds, and notifies lifecycle owners when shutdown begins.
+#[doc(hidden)]
+pub async fn serve_router_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks<
+    F,
+    S,
+>(
+    address: SocketAddr,
+    policy: ShutdownPolicy,
+    actuator: scafra_actuator::ActuatorConfig,
+    security: scafra_security::SecurityConfig,
+    request_timeout: Option<Duration>,
+    router: axum::Router,
+    callbacks: (F, S),
+) -> Result<ServerOutcome, ServerError>
+where
+    F: FnOnce(ShutdownReason) + Send + 'static,
+    S: FnOnce() + Send + 'static,
+{
     serve_on_with_signal(
         address,
-        shutdown_with_callback(shutdown_signal(), on_shutdown_requested),
+        (
+            shutdown_with_callback(shutdown_signal(), callbacks.0),
+            Some(Box::new(callbacks.1) as Box<dyn FnOnce() + Send>),
+        ),
         policy,
         actuator,
         security,
@@ -343,7 +409,7 @@ where
 
 async fn serve_on_with_signal<F>(
     address: SocketAddr,
-    shutdown: F,
+    (shutdown, on_server_started): (F, Option<Box<dyn FnOnce() + Send>>),
     policy: ShutdownPolicy,
     actuator: scafra_actuator::ActuatorConfig,
     security: scafra_security::SecurityConfig,
@@ -371,6 +437,9 @@ where
     scafra_foundation::startup!(%address, "server socket bound");
     for extension in inventory::iter::<scafra_core::OptionalExtensionRegistration> {
         (extension.start)();
+    }
+    if let Some(on_server_started) = on_server_started {
+        on_server_started();
     }
     scafra_foundation::startup!(%address, "Scafra server started");
 
@@ -549,7 +618,7 @@ mod shutdown_callback_tests {
         };
         let server = tokio::spawn(serve_on_with_signal(
             address,
-            shutdown_with_callback(shutdown, callback),
+            (shutdown_with_callback(shutdown, callback), None),
             ShutdownPolicy::new(Duration::from_secs(2), true),
             scafra_actuator::ActuatorConfig::default(),
             scafra_security::SecurityConfig::default(),

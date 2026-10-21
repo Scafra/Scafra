@@ -181,22 +181,38 @@ pub(crate) fn run_cargo(subcommand: &str) -> Result<()> {
 }
 
 /// Runs the application and restarts it when source or configuration files change.
-pub(crate) fn run_dev() -> Result<()> {
+pub(crate) fn run_dev(config_dir: Option<PathBuf>, config_file: Option<PathBuf>) -> Result<()> {
     let root = std::env::current_dir().context("could not determine the project directory")?;
-    let mut snapshot = project_snapshot(&root)?;
-    let mut child = spawn_dev_process()?;
+    let set_config_dir = config_dir.is_some();
+    let set_config_file = config_file.is_some();
+    let inherited_config = if config_dir.is_none() && config_file.is_none() {
+        std::env::var_os("SCAFRA_CONFIG_DIR")
+            .or_else(|| std::env::var_os("SCAFRA_CONFIG_FILE"))
+            .map(PathBuf::from)
+    } else {
+        None
+    };
+    let selected_config = config_dir.or(config_file).or(inherited_config).map(|path| {
+        if path.is_absolute() {
+            path
+        } else {
+            root.join(path)
+        }
+    });
+    let mut snapshot = project_snapshot(&root, selected_config.as_deref())?;
+    let mut child = spawn_dev_process(set_config_dir, set_config_file, selected_config.as_deref())?;
     println!("Scafra dev: watching src, Cargo.toml, Cargo.lock, and resources");
 
     loop {
         thread::sleep(Duration::from_millis(500));
-        let current = project_snapshot(&root)?;
+        let current = project_snapshot(&root, selected_config.as_deref())?;
         let changed = current != snapshot;
         snapshot = current;
 
         if changed {
             println!("\nScafra dev: watched file changed, restarting application...\n");
             stop_child(&mut child);
-            child = spawn_dev_process()?;
+            child = spawn_dev_process(set_config_dir, set_config_file, selected_config.as_deref())?;
             continue;
         }
 
@@ -204,11 +220,15 @@ pub(crate) fn run_dev() -> Result<()> {
             println!("\nScafra dev: application stopped; waiting for the next change...");
             loop {
                 thread::sleep(Duration::from_millis(500));
-                let current = project_snapshot(&root)?;
+                let current = project_snapshot(&root, selected_config.as_deref())?;
                 if current != snapshot {
                     snapshot = current;
                     println!("\nScafra dev: change detected, restarting application...\n");
-                    child = spawn_dev_process()?;
+                    child = spawn_dev_process(
+                        set_config_dir,
+                        set_config_file,
+                        selected_config.as_deref(),
+                    )?;
                     break;
                 }
             }
@@ -216,14 +236,29 @@ pub(crate) fn run_dev() -> Result<()> {
     }
 }
 
-fn spawn_dev_process() -> Result<Child> {
-    Command::new("cargo")
+fn spawn_dev_process(
+    set_config_dir: bool,
+    set_config_file: bool,
+    selected_config: Option<&Path>,
+) -> Result<Child> {
+    let mut command = Command::new("cargo");
+    command
         .arg("run")
         // The CLI is already the development supervisor. This prevents the
         // embedded Scafra supervisor from nesting another watcher inside it.
-        .env("SCAFRA_DEV_CHILD", "1")
-        .spawn()
-        .context("could not start cargo run")
+        .env("SCAFRA_DEV_CHILD", "1");
+    if set_config_dir {
+        command.env_remove("SCAFRA_CONFIG_FILE");
+        if let Some(path) = selected_config {
+            command.env("SCAFRA_CONFIG_DIR", path);
+        }
+    } else if set_config_file {
+        command.env_remove("SCAFRA_CONFIG_DIR");
+        if let Some(path) = selected_config {
+            command.env("SCAFRA_CONFIG_FILE", path);
+        }
+    }
+    command.spawn().context("could not start cargo run")
 }
 
 fn stop_child(child: &mut Child) {
@@ -231,7 +266,10 @@ fn stop_child(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn project_snapshot(root: &Path) -> Result<Vec<(PathBuf, Option<SystemTime>, u64)>> {
+fn project_snapshot(
+    root: &Path,
+    selected_config: Option<&Path>,
+) -> Result<Vec<(PathBuf, Option<SystemTime>, u64)>> {
     let mut files = Vec::new();
     for directory in ["src", "examples", "tests"] {
         let path = root.join(directory);
@@ -245,8 +283,64 @@ fn project_snapshot(root: &Path) -> Result<Vec<(PathBuf, Option<SystemTime>, u64
             add_snapshot_file(&path, &mut files)?;
         }
     }
+    if let Some(config_path) = selected_config {
+        if config_path.is_dir() {
+            collect_configuration_candidates(config_path, &mut files)?;
+            add_snapshot_directory(config_path, &mut files)?;
+        } else if config_path.is_file() {
+            add_snapshot_file(config_path, &mut files)?;
+            if let Some(parent) = config_path.parent() {
+                collect_configuration_candidates(parent, &mut files)?;
+            }
+        } else {
+            files.push((config_path.to_owned(), None, 0));
+        }
+    } else if !root.join("src/resources").is_dir() {
+        collect_configuration_candidates(root, &mut files)?;
+    }
     files.sort_by(|left, right| left.0.cmp(&right.0));
+    files.dedup_by(|left, right| left.0 == right.0);
     Ok(files)
+}
+
+fn collect_configuration_candidates(
+    directory: &Path,
+    files: &mut Vec<(PathBuf, Option<SystemTime>, u64)>,
+) -> Result<()> {
+    for entry in fs::read_dir(directory).with_context(|| {
+        format!(
+            "could not read configuration directory {}",
+            directory.display()
+        )
+    })? {
+        let entry = entry?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let conventional_base = matches!(
+            name,
+            "application.yaml" | "application.yml" | "application.properties"
+        );
+        let conventional_profile = name.strip_prefix("application-").is_some_and(|name| {
+            [".yaml", ".yml", ".properties"]
+                .iter()
+                .any(|extension| name.ends_with(extension))
+        });
+        if (conventional_base || conventional_profile) && fs::metadata(&path)?.is_file() {
+            add_snapshot_file(&path, files)?;
+        }
+    }
+    Ok(())
+}
+
+fn add_snapshot_directory(
+    path: &Path,
+    files: &mut Vec<(PathBuf, Option<SystemTime>, u64)>,
+) -> Result<()> {
+    let metadata = fs::metadata(path)?;
+    files.push((path.to_owned(), metadata.modified().ok(), metadata.len()));
+    Ok(())
 }
 
 fn collect_snapshot_files(

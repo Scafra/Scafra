@@ -7,6 +7,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct BootUiSnapshot {
     server: ServerSnapshot,
+    profile: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -16,12 +17,13 @@ struct ServerSnapshot {
 }
 
 impl BootUiSnapshot {
-    pub(crate) fn from_config(config: &ScafraConfig) -> Self {
+    pub(crate) fn from_config(config: &ScafraConfig, profile: &str) -> Self {
         Self {
             server: ServerSnapshot {
                 host: config.server.host.clone(),
                 port: config.server.port,
             },
+            profile: profile.to_owned(),
         }
     }
 }

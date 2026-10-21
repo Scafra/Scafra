@@ -13,28 +13,21 @@ use scafra_config::{ConfigLoader, ScafraConfig};
 use std::net::SocketAddr;
 
 inventory::submit! {
-    scafra_core::OptionalExtensionRegistration { name: "scafra-bootui", start }
+    scafra_config::ConfiguredExtensionRegistration {
+        name: "scafra-bootui",
+        start: start_with_config,
+    }
 }
 
-/// Starts BootUI when it is enabled in `application.yml` or
-/// `application.properties`.
+/// Starts BootUI from Scafra's already resolved application configuration.
 ///
-/// The configuration snapshot is created once before the listener starts.
+/// The standard runner invokes this after the application listener binds. The
+/// snapshot is created from the same validated configuration and active
+/// profile used by the application.
 /// Invalid or unsafe bind policies are logged and prevent the listener from
 /// starting.
-pub fn start() {
-    let config = match ConfigLoader::new().load::<ScafraConfig>() {
-        Ok(config) => config,
-        Err(_) => {
-            tracing::error!(
-                error_kind = "bootui_configuration",
-                "BootUI configuration could not be loaded"
-            );
-            return;
-        }
-    };
-
-    let prepared = match prepare(config) {
+pub fn start_with_config(config: &ScafraConfig, profile: &str) {
+    let prepared = match prepare(config, profile) {
         Ok(Some(prepared)) => prepared,
         Ok(None) => return,
         Err(error) => {
@@ -74,6 +67,24 @@ pub fn start() {
     });
 }
 
+/// Starts BootUI manually using the configuration selected by the standard
+/// loader. Applications using the Scafra runner should let the runner start it
+/// so it receives the effective in-memory configuration directly.
+pub fn start() {
+    let (config, profile) = match ConfigLoader::new().load_validated_with_profile::<ScafraConfig>()
+    {
+        Ok(config) => config,
+        Err(_) => {
+            tracing::error!(
+                error_kind = "bootui_configuration",
+                "BootUI configuration could not be loaded"
+            );
+            return;
+        }
+    };
+    start_with_config(&config, &profile);
+}
+
 /// Adds the BootUI dashboard to an existing Scafra router.
 ///
 /// For compatibility, the dashboard settings are supplied separately and the
@@ -91,18 +102,19 @@ pub fn layer(router: axum::Router, config: &BootUiConfig) -> axum::Router {
         return router;
     }
 
-    let mut application_config = match ConfigLoader::new().load::<ScafraConfig>() {
-        Ok(config) => config,
-        Err(_) => {
-            tracing::warn!(
+    let (mut application_config, profile) =
+        match ConfigLoader::new().load_validated_with_profile::<ScafraConfig>() {
+            Ok(config) => config,
+            Err(_) => {
+                tracing::warn!(
                 error_kind = "bootui_configuration",
-                "BootUI is using default application link settings because configuration could not be loaded"
+                "BootUI routes were not added because application configuration could not be loaded"
             );
-            ScafraConfig::default()
-        }
-    };
+                return router;
+            }
+        };
     application_config.bootui = config.clone();
-    match try_layer_with_config(router.clone(), &application_config) {
+    match try_layer_with_config_and_profile(router.clone(), &application_config, &profile) {
         Ok(router) => router,
         Err(error) => {
             tracing::error!(
@@ -127,12 +139,22 @@ pub fn try_layer_with_config(
     router: axum::Router,
     config: &ScafraConfig,
 ) -> Result<axum::Router, BootUiPolicyError> {
+    try_layer_with_config_and_profile(router, config, "default")
+}
+
+/// Adds BootUI using the effective application configuration and selected
+/// profile. The profile is included in the allow-listed dashboard snapshot.
+pub fn try_layer_with_config_and_profile(
+    router: axum::Router,
+    config: &ScafraConfig,
+    profile: &str,
+) -> Result<axum::Router, BootUiPolicyError> {
     if !config.bootui.enabled {
         return Ok(router);
     }
 
     let binding = binding::resolve(&config.bootui, &config.security)?;
-    let snapshot = snapshot::BootUiSnapshot::from_config(config);
+    let snapshot = snapshot::BootUiSnapshot::from_config(config, profile);
     let dashboard = dashboard::router(snapshot, binding.protection);
     let path = config.bootui.path.trim_end_matches('/');
     if path.is_empty() || !path.starts_with('/') {
@@ -147,7 +169,10 @@ struct PreparedBootUi {
     router: axum::Router,
 }
 
-fn prepare(config: ScafraConfig) -> Result<Option<PreparedBootUi>, BootUiPolicyError> {
+fn prepare(
+    config: &ScafraConfig,
+    profile: &str,
+) -> Result<Option<PreparedBootUi>, BootUiPolicyError> {
     if !config.bootui.enabled {
         return Ok(None);
     }
@@ -159,7 +184,7 @@ fn prepare(config: ScafraConfig) -> Result<Option<PreparedBootUi>, BootUiPolicyE
     }
 
     let dashboard = dashboard::router(
-        snapshot::BootUiSnapshot::from_config(&config),
+        snapshot::BootUiSnapshot::from_config(config, profile),
         binding.protection,
     );
     Ok(Some(PreparedBootUi {
@@ -181,7 +206,7 @@ mod tests {
         config.bootui.local_only = true;
 
         assert!(matches!(
-            prepare(config),
+            prepare(&config, "default"),
             Err(BootUiPolicyError::LoopbackRequired)
         ));
     }
@@ -193,7 +218,7 @@ mod tests {
             config.bootui.enabled = true;
             config.bootui.host = host.to_owned();
 
-            let prepared = match prepare(config) {
+            let prepared = match prepare(&config, "default") {
                 Ok(Some(prepared)) => prepared,
                 Ok(None) => panic!("enabled BootUI should be prepared"),
                 Err(error) => panic!("loopback host {host} should be accepted: {error}"),

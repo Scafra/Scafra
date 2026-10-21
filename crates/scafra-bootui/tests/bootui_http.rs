@@ -4,7 +4,10 @@ use axum::{
     http::{Request, StatusCode},
     Router,
 };
-use scafra_bootui::{layer, try_layer_with_config, BootUiConfig, BootUiPolicyError};
+use scafra_bootui::{
+    layer, try_layer_with_config, try_layer_with_config_and_profile, BootUiConfig,
+    BootUiPolicyError,
+};
 use scafra_config::ScafraConfig;
 use std::net::SocketAddr;
 use tower::ServiceExt;
@@ -84,7 +87,8 @@ async fn config_route_returns_only_the_safe_dashboard_snapshot_over_http() {
 
         assert_eq!(value["server"]["host"], "127.0.0.1");
         assert_eq!(value["server"]["port"], 8080);
-        assert_eq!(value.as_object().map(serde_json::Map::len), Some(1));
+        assert_eq!(value["profile"], "default");
+        assert_eq!(value.as_object().map(serde_json::Map::len), Some(2));
         for sentinel in [
             BEARER_SENTINEL,
             BASIC_USERNAME_SENTINEL,
@@ -95,6 +99,23 @@ async fn config_route_returns_only_the_safe_dashboard_snapshot_over_http() {
             assert!(!body.contains(sentinel), "response leaked {sentinel}");
         }
     }
+}
+
+#[tokio::test]
+async fn effective_profile_is_carried_into_the_safe_snapshot() {
+    let config = application_config(true, "127.0.0.1");
+    let app = match try_layer_with_config_and_profile(Router::new(), &config, "production") {
+        Ok(app) => app,
+        Err(error) => panic!("loopback BootUI config should be accepted: {error}"),
+    };
+    let response = request(app, "/bootui/api/config", peer("127.0.0.1:43210"), None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_text(response).await;
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(value["profile"], "production");
+    assert!(!body.contains(BEARER_SENTINEL));
+    assert!(!body.contains(BASIC_PASSWORD_SENTINEL));
+    assert!(!body.contains(JWT_SENTINEL));
 }
 
 #[tokio::test]

@@ -631,8 +631,63 @@ it an unlisted member of Scafra's workspace. A packaged CLI uses the published
 
 ## Configuration
 
-The standard runner loads supported files from the current directory. The
-precedence is defaults, base YAML/YML/properties files, profile
+The default configuration convention is relative to the process working
+directory. For compatibility with generated and existing projects, Scafra
+uses `src/resources/` when that directory exists; otherwise it uses the working
+directory itself. It does not search parent directories or the executable
+directory. Convention-based files are optional, so an application with no
+configuration files receives typed defaults.
+
+Use an explicit directory or file when the application can start from more
+than one working directory, especially in containers and production. The
+directory and file are selected exactly; explicit paths are required to exist
+and never fall back to the convention-based root. Relative explicit paths are
+resolved against the process working directory when loading starts; absolute
+paths do not depend on that directory. `SCAFRA_CONFIG_DIR` and
+`SCAFRA_CONFIG_FILE` provide selectors to the standard runner, and cannot be
+set together:
+
+~~~bash
+SCAFRA_CONFIG_DIR=/etc/my-app/config SCAFRA_PROFILE=production ./my-app
+SCAFRA_CONFIG_FILE=/etc/my-app/application.yaml ./my-app
+~~~
+
+The public loader supports the same contract. `config_dir` selects an exact
+directory, `file` selects one required YAML, YML, or properties file, and the
+older `root` method preserves its application-root convention (`src/resources/`
+when present, otherwise the root itself):
+
+~~~rust
+use scafra::{ConfigLoader, ScafraConfig};
+
+let config = ConfigLoader::new()
+    .config_dir("/etc/my-app/config")
+    .profile("production")
+    .load_validated::<ScafraConfig>()?;
+
+let config = ConfigLoader::new()
+    .file("/etc/my-app/application.yaml")
+    .load_validated::<ScafraConfig>()?;
+~~~
+
+An explicitly selected directory must exist and be a directory. Its
+conventional files remain optional; if none are present, Scafra uses typed
+defaults plus environment variables and programmatic overrides. This keeps
+configuration-free applications supported. An explicitly selected file must
+exist and be a regular YAML, YML, or properties file. Missing, invalid,
+unreadable, or malformed explicit sources fail loading with a typed
+`ConfigError`; no defaults are substituted for a missing selected source.
+Profile files beside an explicit file are still optional and use the selected
+profile name.
+
+The `scafra dev` command accepts `--config-dir DIR` or `--config-file FILE`.
+Relative values use the directory where `scafra dev` was invoked. The watcher
+passes the resolved absolute path to the child process and watches the selected
+configuration source for changes. With neither option, generated projects run
+from their project directory and use `src/resources/` by convention. A
+configuration-free app can omit both selectors.
+
+The precedence is typed defaults, base YAML/YML/properties files, profile
 YAML/YML/properties files, sorted `SCAFRA_*` environment variables, then
 explicit loader overrides:
 
@@ -680,8 +735,9 @@ processed in sorted name order. `SCAFRA_PROFILE` selects the profile before
 files are merged; the runner's `SCAFRA_DEV_CHILD` and `SCAFRA_DEV_RELOAD`
 controls are not configuration overrides. `ConfigLoader::profile` selects a
 profile explicitly in application code, while `override_value` is the final
-per-key override for programmatic callers. Missing candidate files are
-optional, but unreadable, malformed, or incorrectly typed values fail loading.
+per-key override for programmatic callers. Missing convention-based candidate
+files are optional, but unreadable, malformed, or incorrectly typed values
+fail loading.
 
 The standard runner loads and validates `ScafraConfig` before initializing
 logging, discovering application components, or binding the listener. A
@@ -698,11 +754,22 @@ errors.
 For development, keep safe defaults in `application.yaml`, use the `dev`
 profile for local-only settings, and pass secrets through environment
 variables. For tests, use `SCAFRA_PROFILE=test` or a test-specific
-`ConfigLoader::root` and `env_prefix`; restore process environment variables
-after each test. For production, select an explicit profile, inject secrets
-from the deployment environment or secret manager, and avoid committing secret
-values to configuration files. Scafra does not load `.env` files implicitly.
-Environment overrides are read from the process environment at load time.
+`ConfigLoader::config_dir` and `env_prefix`; restore process environment
+variables after each test. For production, set `SCAFRA_CONFIG_DIR` or
+`SCAFRA_CONFIG_FILE`, select an explicit profile, and inject secrets from the
+deployment environment or secret manager. For Docker, copy configuration to a
+stable container path and set `SCAFRA_CONFIG_DIR=/etc/my-app/config`; do not
+depend on the container's startup working directory. Scafra does not load
+`.env` files implicitly. Environment overrides are read at load time.
+
+The standard runner passes its validated effective `ScafraConfig` and active
+profile to BootUI after the application listener binds. BootUI does not reload
+configuration for its standard startup snapshot. The snapshot is allow-listed
+to the server address and profile; credentials and other settings remain
+redacted. For custom router composition, use
+`scafra_bootui::try_layer_with_config_and_profile` with the same effective
+configuration value. The compatibility `layer` helper uses the standard
+loader, so custom applications should prefer the checked config-taking API.
 
 `server.timeout` (also `SCAFRA_SERVER_TIMEOUT`) sets an optional
 request-processing deadline in seconds. It must be greater than zero

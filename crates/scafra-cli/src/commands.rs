@@ -9,7 +9,10 @@ use crate::{
 pub(crate) fn run(command: CommandKind) -> Result<()> {
     match command {
         CommandKind::New { name, kind } => create_project(&name, kind),
-        CommandKind::Dev => run_dev(),
+        CommandKind::Dev {
+            config_dir,
+            config_file,
+        } => run_dev(config_dir, config_file),
         CommandKind::Check => run_cargo("check"),
     }
 }

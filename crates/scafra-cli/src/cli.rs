@@ -81,7 +81,14 @@ pub(crate) enum CommandKind {
         kind: ApplicationKind,
     },
     /// Run the current application through Cargo.
-    Dev,
+    Dev {
+        /// Select an exact configuration directory for the application.
+        #[arg(long, value_name = "DIR", conflicts_with = "config_file")]
+        config_dir: Option<PathBuf>,
+        /// Select one required YAML, YML, or properties configuration file.
+        #[arg(long, value_name = "FILE", conflicts_with = "config_dir")]
+        config_file: Option<PathBuf>,
+    },
     /// Check the current application through Cargo.
     Check,
 }
