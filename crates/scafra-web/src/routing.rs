@@ -31,6 +31,94 @@ pub struct RouterOptions {
     pub request_timeout: Option<Duration>,
 }
 
+/// A validated router whose middleware has already been installed.
+///
+/// Use the finalized serving APIs to avoid reapplying global security. The
+/// wrapper cannot be constructed from an unchecked Axum router.
+#[derive(Debug)]
+pub struct FinalizedRouter {
+    pub(crate) router: Router,
+}
+
+impl FinalizedRouter {
+    /// Exposes the guarded router for direct Axum/Tower interoperability.
+    /// Passing it to a legacy Scafra serving API reapplies global middleware.
+    pub fn into_router(self) -> Router {
+        self.router
+    }
+
+    /// Nests the finalized router without reinstalling middleware or policy lookup.
+    pub fn nest(self, prefix: &str) -> Self {
+        Self {
+            router: Router::new().nest(prefix, self.router),
+        }
+    }
+}
+
+/// Finalizes explicitly managed controller composition using route-local policies.
+///
+/// Generated handlers carry their own authorization guard, even through nesting.
+/// Handwritten Axum routes must be explicitly wrapped with [`guard_axum_router`]
+/// before merging. This API deliberately does not infer their security policy.
+/// The legacy [`finish_router_with_options`] retains global raw-router security.
+pub fn finish_managed_router(
+    router: Router,
+    routes: &[crate::registration::RouteMetadata],
+    options: &RouterOptions,
+) -> Result<FinalizedRouter, WebError> {
+    validate_routes_with_options(routes, options)?;
+    let policies = authorization_metadata_for(routes);
+    validate_authorization_metadata(&policies)?;
+    #[cfg(feature = "security")]
+    validate_security_config(&options.security, &policies)?;
+    #[cfg(not(feature = "security"))]
+    if policies.iter().any(policy_requires_security) {
+        return Err(security_configuration_error(
+            "protected routes require the security Cargo feature",
+        ));
+    }
+    #[cfg(feature = "security")]
+    let router = scafra_security::context_layer(router, options.security.clone());
+    Ok(FinalizedRouter {
+        router: http_middleware(router, options),
+    })
+}
+
+/// Applies inherited application security to handwritten routes, before merging
+/// them into a managed composition. Generated controllers already have guards.
+pub fn guard_axum_router(router: Router) -> Router {
+    #[cfg(feature = "security")]
+    {
+        scafra_security::guard_axum_router(router)
+    }
+    #[cfg(not(feature = "security"))]
+    {
+        router
+    }
+}
+
+/// Generated route guard; policy identity is attached to the selected handler.
+#[doc(hidden)]
+pub async fn authorize_route(
+    request: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+    policy: scafra_foundation::RouteAuthorizationMetadata,
+) -> axum::response::Response {
+    #[cfg(feature = "security")]
+    {
+        scafra_security::authorize_route(request, next, policy).await
+    }
+    #[cfg(not(feature = "security"))]
+    {
+        use axum::response::IntoResponse;
+        if validate_authorization_metadata(&[policy]).is_err() || policy_requires_security(&policy)
+        {
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+        next.run(request).await
+    }
+}
+
 /// Builds statically registered controllers using default integration options.
 pub fn build_router() -> Result<Router, WebError> {
     build_router_with_options(&RouterOptions::default())
@@ -96,14 +184,18 @@ fn apply_middleware(
             "protected routes require the security Cargo feature",
         ));
     }
-    let router = router.layer(DefaultBodyLimit::max(1024 * 1024));
     #[cfg(feature = "security")]
     let router =
         scafra_security::layer_with_route_policies(router, options.security.clone(), policies);
+    Ok(http_middleware(router, options))
+}
+
+fn http_middleware(router: Router, options: &RouterOptions) -> Router {
+    let router = router.layer(DefaultBodyLimit::max(1024 * 1024));
     let router = with_request_timeout(router, options.request_timeout);
-    Ok(router.layer(TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
+    router.layer(TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
         tracing::debug_span!("request", method = %request.method(), version = ?request.version())
-    })))
+    }))
 }
 
 fn policy_requires_security(policy: &scafra_foundation::RouteAuthorizationMetadata) -> bool {

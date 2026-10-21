@@ -401,7 +401,61 @@ where
             security,
             request_timeout,
         },
-        Some(router),
+        Some(ApplicationRouter::Raw(router)),
+    )
+    .await
+}
+
+/// Explicit boundary between raw routers and validated finalized composition.
+#[doc(hidden)]
+pub enum ApplicationRouter {
+    Raw(axum::Router),
+    Finalized(crate::FinalizedRouter),
+}
+
+/// Serves an already validated router without duplicating middleware/caches.
+pub async fn serve_finalized_router_with_callbacks<F, S>(
+    address: SocketAddr,
+    policy: ShutdownPolicy,
+    router: crate::FinalizedRouter,
+    callbacks: (F, S),
+) -> Result<ServerOutcome, ServerError>
+where
+    F: FnOnce(ShutdownReason) + Send + 'static,
+    S: FnOnce() + Send + 'static,
+{
+    serve_application_router_with_options_and_callbacks(
+        address,
+        policy,
+        crate::RouterOptions::default(),
+        Some(ApplicationRouter::Finalized(router)),
+        callbacks,
+    )
+    .await
+}
+
+/// Shared typed serving boundary used by the facade lifecycle.
+#[doc(hidden)]
+pub async fn serve_application_router_with_options_and_callbacks<F, S>(
+    address: SocketAddr,
+    policy: ShutdownPolicy,
+    options: crate::RouterOptions,
+    router: Option<ApplicationRouter>,
+    callbacks: (F, S),
+) -> Result<ServerOutcome, ServerError>
+where
+    F: FnOnce(ShutdownReason) + Send + 'static,
+    S: FnOnce() + Send + 'static,
+{
+    serve_on_with_signal(
+        address,
+        (
+            shutdown_with_callback(shutdown_signal(), callbacks.0),
+            Some(Box::new(callbacks.1) as Box<dyn FnOnce() + Send>),
+        ),
+        policy,
+        options,
+        router,
     )
     .await
 }
@@ -427,7 +481,7 @@ where
         ),
         policy,
         options,
-        router,
+        router.map(ApplicationRouter::Raw),
     )
     .await
 }
@@ -452,7 +506,7 @@ async fn serve_on_with_signal<F>(
     (shutdown, on_server_started): (F, Option<Box<dyn FnOnce() + Send>>),
     policy: ShutdownPolicy,
     options: crate::RouterOptions,
-    supplied_router: Option<axum::Router>,
+    supplied_router: Option<ApplicationRouter>,
 ) -> Result<ServerOutcome, ServerError>
 where
     F: Future<Output = Result<ShutdownReason, WebError>> + Send + 'static,
@@ -468,7 +522,8 @@ where
         // Supplied routers may contain generated controllers registered through
         // their low-level adapters. Never assume the caller already installed
         // enforcement. Check all linked controller declarations before binding.
-        Some(router) => {
+        Some(ApplicationRouter::Finalized(router)) => router.into_router(),
+        Some(ApplicationRouter::Raw(router)) => {
             crate::routing::finish_supplied_router(router, &options).map_err(ServerError::from)?
         }
         None => crate::routing::build_router_with_options(&options).map_err(ServerError::from)?,
@@ -664,7 +719,7 @@ mod shutdown_callback_tests {
             (shutdown_with_callback(shutdown, callback), None),
             ShutdownPolicy::new(Duration::from_secs(2), true),
             crate::RouterOptions::default(),
-            Some(router),
+            Some(ApplicationRouter::Raw(router)),
         ));
 
         let mut connection = connect_when_ready(address).await;

@@ -33,7 +33,8 @@ where
     F: FnOnce(&ScafraConfig) -> std::result::Result<axum::Router, StartupError>,
 {
     run_inner(|config| {
-        let result = build_router(&config).map(|router| (Some(router), ()));
+        let result =
+            build_router(&config).map(|router| (Some(web::ApplicationRouter::Raw(router)), ()));
         async move { result }
     })
     .await
@@ -53,7 +54,38 @@ where
     run_inner(|config| async move {
         build_application(config)
             .await
-            .map(|(router, resources)| (Some(router), resources))
+            .map(|(router, resources)| (Some(web::ApplicationRouter::Raw(router)), resources))
+    })
+    .await
+}
+
+/// Runs an explicitly finalized composition without reinstalling middleware.
+/// Use `web::finish_managed_router` to support nested controller public overrides.
+pub async fn run_with_finalized_router<F>(build_router: F) -> std::result::Result<(), StartupError>
+where
+    F: FnOnce(&ScafraConfig) -> std::result::Result<web::FinalizedRouter, StartupError>,
+{
+    run_inner(|config| {
+        let result = build_router(&config)
+            .map(|router| (Some(web::ApplicationRouter::Finalized(router)), ()));
+        async move { result }
+    })
+    .await
+}
+
+/// Runs finalized typed graph composition while retaining managed resource owners.
+pub async fn run_with_finalized_resources<F, Fut, R>(
+    build_application: F,
+) -> std::result::Result<(), StartupError>
+where
+    F: FnOnce(ScafraConfig) -> Fut,
+    Fut: Future<Output = std::result::Result<(web::FinalizedRouter, R), StartupError>>,
+    R: AsyncResourceSet,
+{
+    run_inner(|config| async move {
+        build_application(config)
+            .await
+            .map(|(router, resources)| (Some(web::ApplicationRouter::Finalized(router)), resources))
     })
     .await
 }
@@ -61,7 +93,7 @@ where
 async fn run_inner<F, Fut, R>(build_runtime: F) -> std::result::Result<(), StartupError>
 where
     F: FnOnce(ScafraConfig) -> Fut,
-    Fut: Future<Output = std::result::Result<(Option<axum::Router>, R), StartupError>>,
+    Fut: Future<Output = std::result::Result<(Option<web::ApplicationRouter>, R), StartupError>>,
     R: AsyncResourceSet,
 {
     let loader = ConfigLoader::new().capabilities(config::ConfigCapabilities {
@@ -160,7 +192,7 @@ where
         }
     };
     let options = router_options(&config);
-    let (result, reason) = match scafra_web::serve_router_with_options_and_callbacks(
+    let (result, reason) = match scafra_web::serve_application_router_with_options_and_callbacks(
         address,
         policy,
         options,

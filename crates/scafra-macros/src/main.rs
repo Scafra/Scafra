@@ -92,9 +92,9 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
             };
             runtime.block_on(async {
                     #body
-                    if let Err(error) = ::scafra::run_with_resources(|config| async move {
+                    if let Err(error) = ::scafra::run_with_finalized_resources(|config| async move {
                         let graph = __scafra_graph::compose_async().await?;
-                        let (router, resources) = graph.build_router_with_options_and_resources(
+                        let (router, resources) = graph.build_finalized_router_with_options_and_resources(
                             &::scafra::router_options(&config),
                         );
                         match router {

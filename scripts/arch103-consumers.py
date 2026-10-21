@@ -28,6 +28,7 @@ CASES = [
     ("web", "scafra", ["web"], OPTIONAL),
     ("secure-web", "scafra", ["security"], OPTIONAL - {"scafra-security"}),
     ("jwt", "scafra", ["jwt"], {"reqwest", "scafra-actuator", "scafra-scheduler", "scafra-bootui"}),
+    ("nested", "scafra", ["jwt"], {"reqwest", "scafra-actuator", "scafra-scheduler", "scafra-bootui"}),
     ("jwks", "scafra", ["jwks"], {"scafra-actuator", "scafra-scheduler", "scafra-bootui"}),
     ("actuator", "scafra", ["actuator"], OPTIONAL - {"scafra-actuator"}),
     ("scheduler", "scafra", ["scheduler"], OPTIONAL - {"scafra-scheduler"} | {"scafra-web", "axum"}),
@@ -75,6 +76,103 @@ async fn main() {
 '''
 
 
+# An actual supplied-router entrypoint, with the same macro-produced handler
+# nested both before and after finalization. No URI-derived policies in fixture.
+NESTED = r'''use scafra::prelude::*;
+#[controller("/protected", roles("admin"))]
+#[derive(Default)]
+pub struct Protected;
+#[routes]
+impl Protected {
+ #[get("/")] pub async fn root(&self) -> &'static str { "admin data" }
+ #[get("/scoped")] #[scopes("reports.read")] pub async fn scoped(&self) -> &'static str { "scoped data" }
+ #[get("/open")] #[public] pub async fn open(&self) -> &'static str { "public" }
+}
+#[controller("/implicit")]
+#[derive(Default)]
+pub struct Inherited;
+#[routes]
+impl Inherited {
+ #[get("/public")] pub async fn public_name(&self) -> &'static str { "implicit" }
+}
+#[tokio::main]
+async fn main() {
+ scafra::run_with_finalized_router(|config| {
+  let options = scafra::router_options(config);
+  let routes = <Protected as scafra::web::ControllerRoutes>::route_metadata();
+  let base = <Protected as scafra::web::ControllerRoutes>::register_routes(scafra::web::axum::Router::new());
+  let finalized = scafra::web::finish_managed_router(base.clone(), routes, &options)?.nest("/prefinalized").into_router();
+  let inherited = <Inherited as scafra::web::ControllerRoutes>::register_routes(scafra::web::axum::Router::new());
+  let router = scafra::web::axum::Router::new().nest("/v2", base).merge(finalized).nest("/admin", inherited);
+  let routes: Vec<_> = routes.iter().chain(<Inherited as scafra::web::ControllerRoutes>::route_metadata()).copied().collect();
+  Ok(scafra::web::finish_managed_router(router, &routes, &options)?)
+ }).await.unwrap();
+}
+'''
+
+
+def runtime_nested(project, binary, env, jwt_enabled=None):
+    if jwt_enabled is None:
+        return {"shared_bearer": runtime_nested(project, binary, env, False),
+                "jwt": runtime_nested(project, binary, env, True)}
+    resources = project / "src/resources"
+    resources.mkdir(exist_ok=True)
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+    (resources / "application.yaml").write_text(
+        f"server:\n  host: 127.0.0.1\n  port: {port}\nstartup:\n  banner: false\n"
+        "security:\n  enabled: true\n  bearer_token: arch103-token\n  permit_all: [/implicit/public]\n"
+        + ("  jwt:\n    enabled: true\n    secret: arch103-signing-secret\n" if jwt_enabled else ""))
+    env = {k: v for k, v in env.items() if not k.startswith("SCAFRA_")}
+    env.update(SCAFRA_CONFIG_DIR=str(resources), SCAFRA_DEV_RELOAD="false")
+    checks = {}
+    with (project / ("nested-jwt.log" if jwt_enabled else "nested-bearer.log")).open("w") as log:
+        child = subprocess.Popen([str(binary)], cwd=project, env=env, stdout=log, stderr=subprocess.STDOUT)
+        try:
+            deadline = time.monotonic() + 15
+            while True:
+                if child.poll() is not None:
+                    raise AssertionError("nested consumer exited before readiness; see runtime.log")
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=.3):
+                        break
+                except OSError:
+                    pass
+                if time.monotonic() >= deadline:
+                    raise AssertionError("nested consumer failed readiness; see runtime.log")
+                time.sleep(.01)
+            scenarios = [
+                ("anonymous", "", None, 401),
+                ("invalid", "", "wrong-token", 401),
+                ("jwt-missing-role", "", jwt(), 403),
+                ("jwt-admin", "", jwt(roles=["admin"]), 200),
+                ("jwt-invalid-signature", "", jwt("wrong-secret", roles=["admin"]), 401),
+                ("jwt-missing-scope", "/scoped", jwt(roles=["admin"]), 403),
+                ("jwt-missing-role-with-scope", "/scoped", jwt(scope="reports.read"), 403),
+                ("jwt-role-and-scope", "/scoped", jwt(roles=["admin"], scope="reports.read"), 200),
+                ("public", "/open", None, 200),
+            ]
+            if not jwt_enabled:
+                scenarios = [item for item in scenarios if not item[0].startswith("jwt-")]
+                scenarios.insert(2, ("shared-bearer-missing-role", "", "arch103-token", 403))
+            for prefix in ["/v2", "/prefinalized"]:
+                for label, suffix, token, expected in scenarios:
+                    actual, body = request(port, prefix + "/protected" + suffix, token)
+                    assert actual == expected, f"{prefix} {label}: expected {expected}, got {actual}: {body!r}"
+                    checks[prefix + ":" + label] = actual
+            assert request(port, "/admin/implicit/public")[0] == 401, "nested inherited route matched stripped permit_all path"
+            checks["original_uri_permit_all"] = 401
+            child.send_signal(signal.SIGTERM)
+            checks["sigterm_exit"] = child.wait(timeout=15)
+            assert checks["sigterm_exit"] == 0
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait(timeout=5)
+    return checks
+
+
 def request(port, path, token=None):
     headers = {"Authorization": "Bearer " + token} if token else {}
     try:
@@ -84,15 +182,17 @@ def request(port, path, token=None):
         return error.code, error.read()
 
 
-def jwt(secret="arch103-signing-secret"):
+def jwt(secret="arch103-signing-secret", roles=(), scope=""):
     encode = lambda value: base64.urlsafe_b64encode(value).rstrip(b"=")
     header = encode(b'{"alg":"HS256","typ":"JWT"}')
-    claims = encode(json.dumps({"sub": "test", "exp": int(time.time()) + 600}).encode())
+    claims = encode(json.dumps({"sub": "test", "exp": int(time.time()) + 600, "roles": roles, "scope": scope}).encode())
     message = header + b"." + claims
     return (message + b"." + encode(hmac.new(secret.encode(), message, hashlib.sha256).digest())).decode()
 
 
 def runtime(project, binary, name, env):
+    if name == "nested":
+        return runtime_nested(project, binary, env)
     if name in {"minimal", "default", "core", "config", "scheduler"}:
         subprocess.run([str(binary)], cwd=project, env=env, check=True, timeout=10)
         return {"exit_code": 0}
@@ -254,6 +354,9 @@ def main():
         elif name == "scheduler":
             manifest += 'tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }\n'
             source = SCHEDULER
+        elif name == "nested":
+            manifest += 'tokio = { version = "1", features = ["rt-multi-thread", "macros"] }\n'
+            source = NESTED
         elif web:
             manifest += 'serde_json = "1"\n'
             source = '#[scafra::main]\nasync fn main() {}\n'

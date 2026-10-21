@@ -52,7 +52,10 @@ mod middleware;
 mod policy;
 
 pub use config::{BasicAuthConfig, JwtConfig, SecurityConfig};
-pub use middleware::{layer, layer_with_route_policies};
+pub use middleware::{
+    authorize_route, context_layer, guard_axum_router, layer, layer_with_route_policies,
+    SecurityContext,
+};
 pub use policy::{
     AuthorizationMode, AuthorizationPolicy, ControllerAuthorizationRegistration,
     RouteAuthorizationMetadata,

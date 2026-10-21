@@ -105,7 +105,7 @@ mod tests {
             .to_string();
 
         assert!(expanded.contains("log_startup_failure"));
-        assert!(expanded.contains("run_with_resources"));
+        assert!(expanded.contains("run_with_finalized_resources"));
         assert!(expanded.contains("__scafra_graph :: compose_async"));
         assert!(!expanded.contains("% error"));
         assert!(!expanded.contains("Scafra application failed"));

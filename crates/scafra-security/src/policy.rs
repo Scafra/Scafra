@@ -135,7 +135,7 @@ pub(super) fn matching_policy(
         .or_else(|| protected_fallback.map(|(policy, _)| policy))
 }
 
-fn resolve_policy(metadata: &RouteAuthorizationMetadata) -> ResolvedPolicy {
+pub(super) fn resolve_policy(metadata: &RouteAuthorizationMetadata) -> ResolvedPolicy {
     let controller = metadata.controller_policy;
     let route = metadata.route_policy;
     if route.mode == AuthorizationMode::Public {

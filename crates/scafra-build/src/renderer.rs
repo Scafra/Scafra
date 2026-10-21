@@ -91,7 +91,9 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
         output.push_str("        pub fn build_router_with_options(self, options: &::scafra::web::RouterOptions) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> { let (result, _) = self.build_router_with_options_and_resources(options); result }\n");
     }
     output.push_str("        pub fn build_router_with_options_and_resources(self, options: &::scafra::web::RouterOptions) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { match ::scafra::web::operational_router(options) { Ok(router) => self.build_router_with_options_router_and_resources(router, options), Err(error) => { let resources = self.into_resources(); (Err(error), resources) } } }\n");
-    output.push_str("        fn build_router_with_options_router_and_resources(self, mut router: ::scafra::web::axum::Router, options: &::scafra::web::RouterOptions) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) {\n            let Self {");
+    output.push_str("        pub fn build_finalized_router_with_options_and_resources(self, options: &::scafra::web::RouterOptions) -> (Result<::scafra::web::FinalizedRouter, ::scafra::web::WebError>, Resources) { match ::scafra::web::operational_router(options) { Ok(router) => self.build_router_with_finalizer_and_resources(::scafra::web::guard_axum_router(router), options, ::scafra::web::finish_managed_router), Err(error) => { let resources = self.into_resources(); (Err(error), resources) } } }\n");
+    output.push_str("        fn build_router_with_options_router_and_resources(self, router: ::scafra::web::axum::Router, options: &::scafra::web::RouterOptions) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { self.build_router_with_finalizer_and_resources(router, options, ::scafra::web::finish_router_with_options) }\n");
+    output.push_str("        fn build_router_with_finalizer_and_resources<T, F>(self, mut router: ::scafra::web::axum::Router, options: &::scafra::web::RouterOptions, finalize: F) -> (Result<T, ::scafra::web::WebError>, Resources) where F: FnOnce(::scafra::web::axum::Router, &[::scafra::web::RouteMetadata], &::scafra::web::RouterOptions) -> Result<T, ::scafra::web::WebError> {\n            let Self {");
     for (index, node) in model.nodes.iter().enumerate() {
         let has_consumers = model
             .edges
@@ -111,7 +113,7 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
             "                resource_{index}: managed_{index},\n"
         ));
     }
-    output.push_str("            };\n            let route_result = (|| -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> {\n            let mut routes = ::scafra::web::default_controller_metadata(&[");
+    output.push_str("            };\n            let route_result = (|| -> Result<T, ::scafra::web::WebError> {\n            let mut routes = ::scafra::web::default_controller_metadata(&[");
     for node in &model.nodes {
         if node.kind == GraphNodeKind::Controller
             && !model
@@ -161,7 +163,7 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
             ));
         }
     }
-    output.push_str("            ::scafra::web::finish_router_with_options(router, &routes, options)\n            })();\n            (route_result, resources)\n        }\n        }\n    }\n\n");
+    output.push_str("            finalize(router, &routes, options)\n            })();\n            (route_result, resources)\n        }\n        }\n    }\n\n");
     output.push_str("    #[derive(Default)]\n    pub struct Overrides {\n");
     for (index, node) in model.nodes.iter().enumerate() {
         output.push_str(&format!(
