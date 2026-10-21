@@ -60,6 +60,34 @@ impl ApplicationKind {
     }
 }
 
+/// Optional capabilities added to the always-enabled HTTP starter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum Capability {
+    Web,
+    Security,
+    Jwt,
+    Jwks,
+    Actuator,
+    Scheduler,
+    Bootui,
+    Standard,
+}
+
+impl Capability {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Web => "web",
+            Self::Security => "security",
+            Self::Jwt => "jwt",
+            Self::Jwks => "jwks",
+            Self::Actuator => "actuator",
+            Self::Scheduler => "scheduler",
+            Self::Bootui => "bootui",
+            Self::Standard => "standard",
+        }
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "scafra",
@@ -79,6 +107,9 @@ pub(crate) enum CommandKind {
         /// Select the application shape (web, api, service, or monolith).
         #[arg(long, value_enum, default_value = "web")]
         kind: ApplicationKind,
+        /// Add optional framework capabilities; HTTP is always included.
+        #[arg(long, value_enum, value_delimiter = ',')]
+        features: Vec<Capability>,
     },
     /// Run the current application through Cargo.
     Dev {

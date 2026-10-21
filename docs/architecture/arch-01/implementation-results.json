@@ -1,0 +1,1996 @@
+{
+  "status": "COMPLETE",
+  "scope": "All requested issue #103 implementation phases; local verification, no publication/issue closure",
+  "head": "e041fc27c46e521e848ecbd3895d85b876c9b831",
+  "source_sha256": "f0bd99eb358628fdfe4a50094c29b9c2bc5b9911a07fe5464a75e6ecc2ee189e",
+  "commands": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "seconds": 0.254
+    },
+    {
+      "command": "cargo check --workspace",
+      "exit_code": 0,
+      "seconds": 0.622
+    },
+    {
+      "command": "cargo test --workspace",
+      "exit_code": 0,
+      "seconds": 189.065
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "seconds": 0.34
+    },
+    {
+      "command": "cargo check --workspace --all-features",
+      "exit_code": 0,
+      "seconds": 1.147
+    },
+    {
+      "command": "cargo test --workspace --all-features",
+      "exit_code": 0,
+      "seconds": 236.003
+    }
+  ],
+  "external_consumers": [
+    {
+      "case": "minimal",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 41,
+      "build_exit_code": 0,
+      "runtime": {
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "config",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 37,
+      "build_exit_code": 0,
+      "runtime": {
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "core",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 30,
+      "build_exit_code": 0,
+      "runtime": {
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "web",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 79,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "resource_events": [
+          "init",
+          "cancel",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected",
+        "unavailable-security": "rejected"
+      }
+    },
+    {
+      "case": "secure-web",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 81,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "anonymous": 401,
+        "invalid_token": 401,
+        "missing_role": 403,
+        "public": 200,
+        "resource_events": [
+          "init",
+          "cancel",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected",
+        "unavailable-jwt": "rejected",
+        "disabled-security": "rejected"
+      }
+    },
+    {
+      "case": "jwt",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 121,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "anonymous": 401,
+        "invalid_token": 401,
+        "missing_role": 403,
+        "public": 200,
+        "invalid_signature": 401,
+        "resource_events": [
+          "init",
+          "cancel",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected",
+        "unavailable-jwks": "rejected"
+      }
+    },
+    {
+      "case": "jwks",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 135,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "anonymous": 401,
+        "invalid_token": 401,
+        "missing_role": 403,
+        "public": 200,
+        "invalid_signature": 401,
+        "resource_events": [
+          "init",
+          "cancel",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected"
+      }
+    },
+    {
+      "case": "actuator",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 80,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "actuator": true,
+        "resource_events": [
+          "init",
+          "cancel",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected",
+        "unavailable-security": "rejected",
+        "unknown-readiness": "rejected"
+      }
+    },
+    {
+      "case": "scheduler",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 50,
+      "build_exit_code": 0,
+      "runtime": {
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "default",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 41,
+      "build_exit_code": 0,
+      "runtime": {
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "standard",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 137,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "anonymous": 401,
+        "invalid_token": 401,
+        "missing_role": 403,
+        "public": 200,
+        "actuator": true,
+        "resource_events": [
+          "init",
+          "tick",
+          "tick",
+          "tick",
+          "tick",
+          "tick",
+          "cancel",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected",
+        "unknown-readiness": "rejected"
+      }
+    },
+    {
+      "case": "bootui",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 82,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "anonymous": 401,
+        "invalid_token": 401,
+        "missing_role": 403,
+        "public": 200,
+        "bootui_safe_snapshot": true,
+        "resource_events": [
+          "init",
+          "cancel",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected"
+      }
+    },
+    {
+      "case": "all",
+      "runtime_requested": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "normal_packages_excluding_root": 138,
+      "build_exit_code": 0,
+      "runtime": {
+        "http": 200,
+        "json": true,
+        "anonymous": 401,
+        "invalid_token": 401,
+        "missing_role": 403,
+        "public": 200,
+        "actuator": true,
+        "bootui_safe_snapshot": true,
+        "resource_events": [
+          "init",
+          "tick",
+          "tick",
+          "tick",
+          "tick",
+          "cancel",
+          "tick",
+          "cancel",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "unknown-framework-key": "rejected",
+        "unknown-readiness": "rejected"
+      }
+    }
+  ],
+  "negative_consumers": [
+    {
+      "case": "main-requires-web",
+      "compiler": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--locked"
+        ],
+        "exit_code": 101,
+        "seconds": 3.1306659060064703
+      },
+      "expected_diagnostic": "requires the `web` Cargo feature",
+      "status": "PASS"
+    },
+    {
+      "case": "controller-requires-web",
+      "compiler": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--locked"
+        ],
+        "exit_code": 101,
+        "seconds": 1.081258688995149
+      },
+      "expected_diagnostic": "requires the `web` Cargo feature",
+      "status": "PASS"
+    },
+    {
+      "case": "protected-route-fails-closed",
+      "compiler": {
+        "command": [
+          "cargo",
+          "build",
+          "--offline",
+          "--locked"
+        ],
+        "exit_code": 0,
+        "seconds": 20.787950905010803
+      },
+      "runtime": {
+        "exit_code": 1,
+        "listener_observed": false,
+        "resource_events": [
+          "init",
+          "cancel",
+          "shutdown",
+          "drop"
+        ],
+        "expected_diagnostic": "protected routes require the security Cargo feature",
+        "seconds": 0.13506281998706982
+      },
+      "status": "PASS"
+    },
+    {
+      "case": "unified-subcrate-capabilities-stay-rejected",
+      "compiler": {
+        "command": [
+          "cargo",
+          "build",
+          "--offline",
+          "--locked"
+        ],
+        "exit_code": 0,
+        "seconds": 18.57900829598657
+      },
+      "scenarios": {
+        "security": {
+          "exit_code": 1,
+          "listener_observed": false,
+          "resource_events": [],
+          "expected_diagnostic": "module is unavailable",
+          "seconds": 0.07837073600967415
+        },
+        "actuator": {
+          "exit_code": 1,
+          "listener_observed": false,
+          "resource_events": [],
+          "expected_diagnostic": "module is unavailable",
+          "seconds": 0.048130099021364
+        },
+        "scheduler": {
+          "exit_code": 1,
+          "listener_observed": false,
+          "resource_events": [],
+          "expected_diagnostic": "module is unavailable",
+          "seconds": 0.042479555995669216
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "case": "features-are-additive-across-aliased-helper",
+      "compiler": {
+        "command": [
+          "cargo",
+          "build",
+          "--offline",
+          "--locked"
+        ],
+        "exit_code": 0,
+        "seconds": 20.552323819021694
+      },
+      "tree": {
+        "command": [
+          "cargo",
+          "tree",
+          "--offline",
+          "--locked",
+          "-e",
+          "normal",
+          "--prefix",
+          "none"
+        ],
+        "exit_code": 0,
+        "seconds": 1.0671824390010443
+      },
+      "features": {
+        "command": [
+          "cargo",
+          "tree",
+          "--offline",
+          "--locked",
+          "-e",
+          "features"
+        ],
+        "exit_code": 0,
+        "seconds": 1.3112486749887466
+      },
+      "verified_present": [
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-security"
+      ],
+      "status": "PASS"
+    }
+  ],
+  "packages": {
+    "method": "local directory registry-source staging; no publication",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "git_head": "e041fc27c46e521e848ecbd3895d85b876c9b831",
+    "packages": {
+      "scafra-foundation": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-core": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-actuator": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-scheduler": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-security": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-config": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-web": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-build": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-macros": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-bootui": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra-cli": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      },
+      "scafra": {
+        "version": "0.1.0",
+        "verification": "PASS extracted package"
+      }
+    },
+    "consumers": {
+      "web": "PASS registry-source macro consumer",
+      "standard": "PASS registry-source macro consumer"
+    }
+  },
+  "dependency_counts": [
+    {
+      "features": "none",
+      "direct_normal": 7,
+      "normal_closure": 40,
+      "indirect_normal": 33
+    },
+    {
+      "features": "web",
+      "direct_normal": 10,
+      "normal_closure": 78,
+      "indirect_normal": 68
+    },
+    {
+      "features": "security",
+      "direct_normal": 11,
+      "normal_closure": 80,
+      "indirect_normal": 69
+    },
+    {
+      "features": "jwt",
+      "direct_normal": 11,
+      "normal_closure": 120,
+      "indirect_normal": 109
+    },
+    {
+      "features": "jwks",
+      "direct_normal": 11,
+      "normal_closure": 134,
+      "indirect_normal": 123
+    },
+    {
+      "features": "actuator",
+      "direct_normal": 11,
+      "normal_closure": 79,
+      "indirect_normal": 68
+    },
+    {
+      "features": "scheduler",
+      "direct_normal": 9,
+      "normal_closure": 49,
+      "indirect_normal": 40
+    },
+    {
+      "features": "bootui",
+      "direct_normal": 12,
+      "normal_closure": 81,
+      "indirect_normal": 69
+    },
+    {
+      "features": "standard",
+      "direct_normal": 13,
+      "normal_closure": 136,
+      "indirect_normal": 123
+    },
+    {
+      "features": "standard,bootui",
+      "direct_normal": 14,
+      "normal_closure": 137,
+      "indirect_normal": 123
+    }
+  ],
+  "measurements": {
+    "before": {
+      "commit": "e041fc27c46e521e848ecbd3895d85b876c9b831",
+      "branch": "103-arch-01-make-scafra-framework-modules-independently-opt-in-before-100",
+      "working_tree": "?? docs/architecture/\n?? scripts/\n",
+      "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+      "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+      "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+      "cpu_count": 8,
+      "workspace_lock_sha256": "676eefd590fb0a0d700bfeb5a0cec3fe370747eb11db08e9cb6fcb5a5ce244b3",
+      "profiles": "dev defaults; release thin LTO, codegen-units=1 (CLI template)",
+      "measurements": [
+        {
+          "label": "check-scafra",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 13.638709
+        },
+        {
+          "label": "check-scafra-actuator",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-actuator",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 6.289918
+        },
+        {
+          "label": "check-scafra-bootui",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-bootui",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 8.859549
+        },
+        {
+          "label": "check-scafra-build",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-build",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 3.055854
+        },
+        {
+          "label": "check-scafra-cli",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-cli",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 1.276464
+        },
+        {
+          "label": "check-scafra-config",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-config",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.068784
+        },
+        {
+          "label": "check-scafra-core",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-core",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.039371
+        },
+        {
+          "label": "check-scafra-foundation",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-foundation",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.039827
+        },
+        {
+          "label": "check-scafra-macros",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-macros",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 4.58962
+        },
+        {
+          "label": "check-scafra-scheduler",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-scheduler",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.202281
+        },
+        {
+          "label": "check-scafra-security",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-security",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 2.818296
+        },
+        {
+          "label": "check-scafra-web",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-web",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 1.222986
+        },
+        {
+          "label": "cli-build",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-cli"
+          ],
+          "exit_code": 0,
+          "seconds": 4.434118
+        },
+        {
+          "label": "generate-api",
+          "command": [
+            "/var/tmp/scafra-103-baseline-final/tool-target/debug/scafra",
+            "new",
+            "/var/tmp/scafra-103-baseline-final/generated-api",
+            "--kind",
+            "api"
+          ],
+          "exit_code": 0,
+          "seconds": 0.001496
+        },
+        {
+          "label": "consumer-lock",
+          "command": [
+            "cargo",
+            "generate-lockfile",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.234531
+        },
+        {
+          "label": "consumer-clean-dev",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 22.312693
+        },
+        {
+          "label": "consumer-warm-noop",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.073891
+        },
+        {
+          "label": "consumer-incremental-edit",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.451492
+        },
+        {
+          "label": "consumer-release",
+          "command": [
+            "cargo",
+            "build",
+            "--release",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 36.457146
+        }
+      ],
+      "consumer_lock_sha256": "65529a781c2f80385cdb2566da6f9f1eb85f3dd080b70c7e72a54e2dc7ffbd0c",
+      "consumer_manifest": "[package]\nname = \"generated_api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[dependencies]\nscafra = { path = \"../../../../home/steffenp/workspace/ember-rs/ember/crates/scafra\" }\nserde = { version = \"1\", features = [\"derive\"] }\n\n[profile.release]\nlto = \"thin\"\ncodegen-units = 1\n",
+      "consumer_normal_closure_excluding_root": 137,
+      "release_binary_bytes_unstripped": 6881760,
+      "runtime": [
+        {
+          "scenario": "default",
+          "spawn_to_first_http_seconds": 0.03016382097848691,
+          "memory": [
+            "VmHWM:\t    6432 kB",
+            "VmRSS:\t    6432 kB"
+          ],
+          "shutdown_exit_code": 0
+        },
+        {
+          "scenario": "secure",
+          "spawn_to_first_http_seconds": 0.006506092002382502,
+          "memory": [
+            "VmHWM:\t    6352 kB",
+            "VmRSS:\t    6352 kB"
+          ],
+          "shutdown_exit_code": 0
+        },
+        {
+          "scenario": "secure-actuator",
+          "spawn_to_first_http_seconds": 0.006429928995203227,
+          "memory": [
+            "VmHWM:\t    6284 kB",
+            "VmRSS:\t    6284 kB"
+          ],
+          "shutdown_exit_code": 0
+        }
+      ],
+      "workspace_lock_unchanged": true
+    },
+    "web": {
+      "commit": "e041fc27c46e521e848ecbd3895d85b876c9b831",
+      "branch": "103-arch-01-make-scafra-framework-modules-independently-opt-in-before-100",
+      "working_tree": " M .github/workflows/ci.yml\n M .github/workflows/publish.yml\n M Cargo.lock\n M Cargo.toml\n M README.md\n M crates/scafra-bootui/Cargo.toml\n M crates/scafra-build/src/renderer.rs\n M crates/scafra-build/tests/fixtures/ambiguous/Cargo.toml\n M crates/scafra-build/tests/fixtures/async_missing_shutdown/Cargo.toml\n M crates/scafra-build/tests/fixtures/async_owned_dependency/Cargo.toml\n M crates/scafra-build/tests/fixtures/cycle/Cargo.toml\n M crates/scafra-build/tests/fixtures/duplicate/Cargo.toml\n M crates/scafra-build/tests/fixtures/foreign_output/Cargo.toml\n M crates/scafra-build/tests/fixtures/missing/Cargo.toml\n M crates/scafra-build/tests/fixtures/provider_contract/Cargo.toml\n M crates/scafra-build/tests/fixtures/qualified/Cargo.toml\n M crates/scafra-cli/src/cli.rs\n M crates/scafra-cli/src/commands.rs\n M crates/scafra-cli/src/generator.rs\n M crates/scafra-cli/src/templates.rs\n M crates/scafra-cli/src/tests.rs\n M crates/scafra-cli/tests/generated_projects.rs\n M crates/scafra-config/Cargo.toml\n M crates/scafra-config/src/lib.rs\n M crates/scafra-config/src/models.rs\n M crates/scafra-config/src/sources.rs\n M crates/scafra-config/tests/actuator_security.rs\n M crates/scafra-config/tests/ember014_matrix.rs\n M crates/scafra-config/tests/scheduler_validation.rs\n M crates/scafra-foundation/Cargo.toml\n M crates/scafra-foundation/src/lib.rs\n M crates/scafra-macros/src/controller.rs\n M crates/scafra-macros/src/lib.rs\n M crates/scafra-macros/src/main.rs\n M crates/scafra-macros/src/routes.rs\n M crates/scafra-security/Cargo.toml\n M crates/scafra-security/src/authentication.rs\n M crates/scafra-security/src/config.rs\n M crates/scafra-security/src/jwt.rs\n M crates/scafra-security/src/lib.rs\n M crates/scafra-security/src/middleware.rs\n M crates/scafra-security/src/policy.rs\n M crates/scafra-security/tests/config.rs\n M crates/scafra-security/tests/jwks.rs\n M crates/scafra-security/tests/jwt.rs\n M crates/scafra-security/tests/policies.rs\n M crates/scafra-web/Cargo.toml\n M crates/scafra-web/src/errors.rs\n M crates/scafra-web/src/lib.rs\n M crates/scafra-web/src/registration.rs\n M crates/scafra-web/src/routing.rs\n M crates/scafra-web/src/server.rs\n M crates/scafra-web/tests/actuator.rs\n M crates/scafra-web/tests/actuator_probes.rs\n M crates/scafra-web/tests/security.rs\n M crates/scafra/Cargo.toml\n M crates/scafra/README.md\n M crates/scafra/src/lib.rs\n M docs/README.md\n M docs/architecture.md\n M docs/configuration.md\n M docs/contributing.md\n M docs/generated-code.md\n M docs/getting-started.md\n M docs/publishing.md\n M docs/security.md\n M examples/async-resource/Cargo.toml\n?? crates/scafra-config/README.md\n?? crates/scafra-config/tests/modular.rs\n?? crates/scafra-foundation/src/authorization.rs\n?? crates/scafra-security/tests/features.rs\n?? crates/scafra-web/tests/optional_security.rs\n?? crates/scafra/src/feature_macros.rs\n?? crates/scafra/src/prelude.rs\n?? crates/scafra/src/private.rs\n?? crates/scafra/src/startup.rs\n?? docs/architecture/\n?? docs/modules.md\n?? scripts/\n",
+      "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+      "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+      "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+      "cpu_count": 8,
+      "workspace_lock_sha256": "f82b02aebbd2d89b9a43be19cb163551089f440826a94b6dabd79f50f6584141",
+      "source_sha256": "f0bd99eb358628fdfe4a50094c29b9c2bc5b9911a07fe5464a75e6ecc2ee189e",
+      "profiles": "dev defaults; release thin LTO, codegen-units=1 (CLI template)",
+      "measurements": [
+        {
+          "label": "check-scafra",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 14.188861
+        },
+        {
+          "label": "check-scafra-actuator",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-actuator",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 35.449808
+        },
+        {
+          "label": "check-scafra-bootui",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-bootui",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 48.86833
+        },
+        {
+          "label": "check-scafra-build",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-build",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 12.094967
+        },
+        {
+          "label": "check-scafra-cli",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-cli",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 9.160899
+        },
+        {
+          "label": "check-scafra-config",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-config",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 2.735163
+        },
+        {
+          "label": "check-scafra-core",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-core",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.218947
+        },
+        {
+          "label": "check-scafra-foundation",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-foundation",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.098087
+        },
+        {
+          "label": "check-scafra-macros",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-macros",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 11.653219
+        },
+        {
+          "label": "check-scafra-scheduler",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-scheduler",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.479197
+        },
+        {
+          "label": "check-scafra-security",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-security",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.112719
+        },
+        {
+          "label": "check-scafra-web",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-web",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.867451
+        },
+        {
+          "label": "cli-build",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-cli"
+          ],
+          "exit_code": 0,
+          "seconds": 4.494776
+        },
+        {
+          "label": "generate-api",
+          "command": [
+            "/var/tmp/scafra-103-release-web/tool-target/debug/scafra",
+            "new",
+            "/var/tmp/scafra-103-release-web/generated-api",
+            "--kind",
+            "api",
+            "--features",
+            "web"
+          ],
+          "exit_code": 0,
+          "seconds": 0.001462
+        },
+        {
+          "label": "consumer-lock",
+          "command": [
+            "cargo",
+            "metadata",
+            "--format-version",
+            "1",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.115403
+        },
+        {
+          "label": "consumer-clean-dev",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 21.92873
+        },
+        {
+          "label": "consumer-warm-noop",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.07212
+        },
+        {
+          "label": "consumer-incremental-edit",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.369624
+        },
+        {
+          "label": "consumer-release",
+          "command": [
+            "cargo",
+            "build",
+            "--release",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 39.959663
+        }
+      ],
+      "consumer_lock_sha256": "c2c2d18e98a0b3a15093be4cf28d76246d5755b252c1f9391195463f5840fecb",
+      "consumer_manifest": "[package]\nname = \"generated_api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[dependencies]\nscafra = { path = \"../../../../home/steffenp/workspace/ember-rs/ember/crates/scafra\", default-features = false, features = [\"web\"] }\nserde = { version = \"1\", features = [\"derive\"] }\n\n[profile.release]\nlto = \"thin\"\ncodegen-units = 1\n",
+      "consumer_normal_closure_excluding_root": 79,
+      "release_binary_bytes_unstripped": 3177552,
+      "selected_capabilities": "web",
+      "runtime": [
+        {
+          "scenario": "default",
+          "spawn_to_first_http_seconds": 0.027650936011923477,
+          "memory": [
+            "VmHWM:\t    4680 kB",
+            "VmRSS:\t    4680 kB"
+          ],
+          "shutdown_exit_code": 0
+        }
+      ],
+      "workspace_lock_unchanged": true,
+      "source_unchanged_during_measurement": true,
+      "new_external_versions_vs_before": [],
+      "removed_external_versions_vs_before": [
+        [
+          "autocfg",
+          "1.5.1"
+        ],
+        [
+          "base64",
+          "0.22.1"
+        ],
+        [
+          "base64",
+          "0.23.1"
+        ],
+        [
+          "bumpalo",
+          "3.20.3"
+        ],
+        [
+          "cc",
+          "1.9.0"
+        ],
+        [
+          "cfg_aliases",
+          "0.2.2"
+        ],
+        [
+          "chacha20",
+          "0.10.2"
+        ],
+        [
+          "cpufeatures",
+          "0.3.1"
+        ],
+        [
+          "deranged",
+          "0.5.9"
+        ],
+        [
+          "displaydoc",
+          "0.2.7"
+        ],
+        [
+          "find-msvc-tools",
+          "0.1.15"
+        ],
+        [
+          "futures-channel",
+          "0.3.34"
+        ],
+        [
+          "getrandom",
+          "0.2.17"
+        ],
+        [
+          "getrandom",
+          "0.4.3"
+        ],
+        [
+          "hyper-rustls",
+          "0.27.10"
+        ],
+        [
+          "icu_collections",
+          "2.3.0"
+        ],
+        [
+          "icu_locale_core",
+          "2.3.0"
+        ],
+        [
+          "icu_normalizer",
+          "2.3.0"
+        ],
+        [
+          "icu_normalizer_data",
+          "2.3.0"
+        ],
+        [
+          "icu_properties",
+          "2.3.0"
+        ],
+        [
+          "icu_properties_data",
+          "2.3.0"
+        ],
+        [
+          "icu_provider",
+          "2.3.1"
+        ],
+        [
+          "idna",
+          "1.1.0"
+        ],
+        [
+          "idna_adapter",
+          "1.2.2"
+        ],
+        [
+          "ipnet",
+          "2.12.2"
+        ],
+        [
+          "js-sys",
+          "0.3.106"
+        ],
+        [
+          "jsonwebtoken",
+          "9.3.1"
+        ],
+        [
+          "litemap",
+          "0.8.3"
+        ],
+        [
+          "lru-slab",
+          "0.1.3"
+        ],
+        [
+          "num-bigint",
+          "0.4.8"
+        ],
+        [
+          "num-conv",
+          "0.2.2"
+        ],
+        [
+          "num-integer",
+          "0.1.47"
+        ],
+        [
+          "num-traits",
+          "0.2.19"
+        ],
+        [
+          "pem",
+          "3.0.6"
+        ],
+        [
+          "potential_utf",
+          "0.1.6"
+        ],
+        [
+          "powerfmt",
+          "0.2.1"
+        ],
+        [
+          "quinn",
+          "0.11.12"
+        ],
+        [
+          "quinn-proto",
+          "0.11.19"
+        ],
+        [
+          "quinn-udp",
+          "0.5.16"
+        ],
+        [
+          "r-efi",
+          "6.0.0"
+        ],
+        [
+          "rand",
+          "0.10.3"
+        ],
+        [
+          "rand_core",
+          "0.10.1"
+        ],
+        [
+          "rand_pcg",
+          "0.10.2"
+        ],
+        [
+          "reqwest",
+          "0.12.28"
+        ],
+        [
+          "ring",
+          "0.17.14"
+        ],
+        [
+          "rustc-hash",
+          "2.1.3"
+        ],
+        [
+          "rustls",
+          "0.23.46"
+        ],
+        [
+          "rustls-pki-types",
+          "1.15.1"
+        ],
+        [
+          "rustls-webpki",
+          "0.103.16"
+        ],
+        [
+          "shlex",
+          "2.0.1"
+        ],
+        [
+          "simple_asn1",
+          "0.6.4"
+        ],
+        [
+          "stable_deref_trait",
+          "1.2.1"
+        ],
+        [
+          "subtle",
+          "2.6.1"
+        ],
+        [
+          "synstructure",
+          "0.14.0"
+        ],
+        [
+          "time",
+          "0.3.55"
+        ],
+        [
+          "time-core",
+          "0.1.9"
+        ],
+        [
+          "time-macros",
+          "0.2.32"
+        ],
+        [
+          "tinystr",
+          "0.8.4"
+        ],
+        [
+          "tinyvec",
+          "1.13.3"
+        ],
+        [
+          "tokio-rustls",
+          "0.26.6"
+        ],
+        [
+          "try-lock",
+          "0.2.5"
+        ],
+        [
+          "untrusted",
+          "0.9.0"
+        ],
+        [
+          "url",
+          "2.5.8"
+        ],
+        [
+          "utf8_iter",
+          "1.0.4"
+        ],
+        [
+          "want",
+          "0.3.2"
+        ],
+        [
+          "wasm-bindgen",
+          "0.2.129"
+        ],
+        [
+          "wasm-bindgen-futures",
+          "0.4.79"
+        ],
+        [
+          "wasm-bindgen-macro",
+          "0.2.129"
+        ],
+        [
+          "wasm-bindgen-macro-support",
+          "0.2.129"
+        ],
+        [
+          "wasm-bindgen-shared",
+          "0.2.129"
+        ],
+        [
+          "web-sys",
+          "0.3.106"
+        ],
+        [
+          "web-time",
+          "1.1.0"
+        ],
+        [
+          "webpki-roots",
+          "1.0.10"
+        ],
+        [
+          "windows-sys",
+          "0.52.0"
+        ],
+        [
+          "windows-targets",
+          "0.52.6"
+        ],
+        [
+          "windows_aarch64_gnullvm",
+          "0.52.6"
+        ],
+        [
+          "windows_aarch64_msvc",
+          "0.52.6"
+        ],
+        [
+          "windows_i686_gnu",
+          "0.52.6"
+        ],
+        [
+          "windows_i686_gnullvm",
+          "0.52.6"
+        ],
+        [
+          "windows_i686_msvc",
+          "0.52.6"
+        ],
+        [
+          "windows_x86_64_gnu",
+          "0.52.6"
+        ],
+        [
+          "windows_x86_64_gnullvm",
+          "0.52.6"
+        ],
+        [
+          "windows_x86_64_msvc",
+          "0.52.6"
+        ],
+        [
+          "writeable",
+          "0.6.4"
+        ],
+        [
+          "yoke",
+          "0.8.3"
+        ],
+        [
+          "yoke-derive",
+          "0.8.4"
+        ],
+        [
+          "zerofrom",
+          "0.1.8"
+        ],
+        [
+          "zerofrom-derive",
+          "0.1.8"
+        ],
+        [
+          "zeroize",
+          "1.9.1"
+        ],
+        [
+          "zerotrie",
+          "0.2.5"
+        ],
+        [
+          "zerovec",
+          "0.11.8"
+        ],
+        [
+          "zerovec-derive",
+          "0.11.6"
+        ]
+      ]
+    },
+    "standard": {
+      "commit": "e041fc27c46e521e848ecbd3895d85b876c9b831",
+      "branch": "103-arch-01-make-scafra-framework-modules-independently-opt-in-before-100",
+      "working_tree": " M .github/workflows/ci.yml\n M .github/workflows/publish.yml\n M .gitignore\n M Cargo.lock\n M Cargo.toml\n M README.md\n M crates/scafra-bootui/Cargo.toml\n M crates/scafra-build/src/renderer.rs\n M crates/scafra-build/tests/fixtures/ambiguous/Cargo.toml\n M crates/scafra-build/tests/fixtures/async_missing_shutdown/Cargo.toml\n M crates/scafra-build/tests/fixtures/async_owned_dependency/Cargo.toml\n M crates/scafra-build/tests/fixtures/cycle/Cargo.toml\n M crates/scafra-build/tests/fixtures/duplicate/Cargo.toml\n M crates/scafra-build/tests/fixtures/foreign_output/Cargo.toml\n M crates/scafra-build/tests/fixtures/missing/Cargo.toml\n M crates/scafra-build/tests/fixtures/provider_contract/Cargo.toml\n M crates/scafra-build/tests/fixtures/qualified/Cargo.toml\n M crates/scafra-cli/src/cli.rs\n M crates/scafra-cli/src/commands.rs\n M crates/scafra-cli/src/generator.rs\n M crates/scafra-cli/src/templates.rs\n M crates/scafra-cli/src/tests.rs\n M crates/scafra-cli/tests/generated_projects.rs\n M crates/scafra-config/Cargo.toml\n M crates/scafra-config/src/lib.rs\n M crates/scafra-config/src/models.rs\n M crates/scafra-config/src/sources.rs\n M crates/scafra-config/tests/actuator_security.rs\n M crates/scafra-config/tests/ember014_matrix.rs\n M crates/scafra-config/tests/scheduler_validation.rs\n M crates/scafra-foundation/Cargo.toml\n M crates/scafra-foundation/src/lib.rs\n M crates/scafra-macros/src/controller.rs\n M crates/scafra-macros/src/lib.rs\n M crates/scafra-macros/src/main.rs\n M crates/scafra-macros/src/routes.rs\n M crates/scafra-security/Cargo.toml\n M crates/scafra-security/src/authentication.rs\n M crates/scafra-security/src/config.rs\n M crates/scafra-security/src/jwt.rs\n M crates/scafra-security/src/lib.rs\n M crates/scafra-security/src/middleware.rs\n M crates/scafra-security/src/policy.rs\n M crates/scafra-security/tests/config.rs\n M crates/scafra-security/tests/jwks.rs\n M crates/scafra-security/tests/jwt.rs\n M crates/scafra-security/tests/policies.rs\n M crates/scafra-web/Cargo.toml\n M crates/scafra-web/src/errors.rs\n M crates/scafra-web/src/lib.rs\n M crates/scafra-web/src/registration.rs\n M crates/scafra-web/src/routing.rs\n M crates/scafra-web/src/server.rs\n M crates/scafra-web/tests/actuator.rs\n M crates/scafra-web/tests/actuator_probes.rs\n M crates/scafra-web/tests/security.rs\n M crates/scafra/Cargo.toml\n M crates/scafra/README.md\n M crates/scafra/src/lib.rs\n M docs/README.md\n M docs/architecture.md\n M docs/configuration.md\n M docs/contributing.md\n M docs/generated-code.md\n M docs/getting-started.md\n M docs/publishing.md\n M docs/security.md\n M examples/async-resource/Cargo.toml\n?? crates/scafra-config/README.md\n?? crates/scafra-config/tests/modular.rs\n?? crates/scafra-foundation/src/authorization.rs\n?? crates/scafra-security/tests/features.rs\n?? crates/scafra-web/tests/optional_security.rs\n?? crates/scafra/src/feature_macros.rs\n?? crates/scafra/src/prelude.rs\n?? crates/scafra/src/private.rs\n?? crates/scafra/src/startup.rs\n?? docs/architecture/\n?? docs/modules.md\n?? scripts/\n",
+      "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+      "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+      "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+      "cpu_count": 8,
+      "workspace_lock_sha256": "f82b02aebbd2d89b9a43be19cb163551089f440826a94b6dabd79f50f6584141",
+      "source_sha256": "f0bd99eb358628fdfe4a50094c29b9c2bc5b9911a07fe5464a75e6ecc2ee189e",
+      "profiles": "dev defaults; release thin LTO, codegen-units=1 (CLI template)",
+      "measurements": [
+        {
+          "label": "check-scafra",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 9.801933
+        },
+        {
+          "label": "check-scafra-actuator",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-actuator",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 15.412677
+        },
+        {
+          "label": "check-scafra-bootui",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-bootui",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 3.735845
+        },
+        {
+          "label": "check-scafra-build",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-build",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 50.663438
+        },
+        {
+          "label": "check-scafra-cli",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-cli",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 17.490812
+        },
+        {
+          "label": "check-scafra-config",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-config",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 9.107475
+        },
+        {
+          "label": "check-scafra-core",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-core",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.538731
+        },
+        {
+          "label": "check-scafra-foundation",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-foundation",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.523547
+        },
+        {
+          "label": "check-scafra-macros",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-macros",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 30.338248
+        },
+        {
+          "label": "check-scafra-scheduler",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-scheduler",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.853917
+        },
+        {
+          "label": "check-scafra-security",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-security",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 0.386268
+        },
+        {
+          "label": "check-scafra-web",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-web",
+            "--no-default-features"
+          ],
+          "exit_code": 0,
+          "seconds": 2.239344
+        },
+        {
+          "label": "cli-build",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline",
+            "-p",
+            "scafra-cli"
+          ],
+          "exit_code": 0,
+          "seconds": 9.231067
+        },
+        {
+          "label": "generate-api",
+          "command": [
+            "/var/tmp/scafra-103-release-standard/tool-target/debug/scafra",
+            "new",
+            "/var/tmp/scafra-103-release-standard/generated-api",
+            "--kind",
+            "api",
+            "--features",
+            "standard"
+          ],
+          "exit_code": 0,
+          "seconds": 0.002721
+        },
+        {
+          "label": "consumer-lock",
+          "command": [
+            "cargo",
+            "metadata",
+            "--format-version",
+            "1",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.256066
+        },
+        {
+          "label": "consumer-clean-dev",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 24.958444
+        },
+        {
+          "label": "consumer-warm-noop",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.069405
+        },
+        {
+          "label": "consumer-incremental-edit",
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 0.413914
+        },
+        {
+          "label": "consumer-release",
+          "command": [
+            "cargo",
+            "build",
+            "--release",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 31.083287
+        }
+      ],
+      "consumer_lock_sha256": "59551689e43cadcbae7809fc9979f6dbb56f6bfe2f25855c323ea93a02c56045",
+      "consumer_manifest": "[package]\nname = \"generated_api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[dependencies]\nscafra = { path = \"../../../../home/steffenp/workspace/ember-rs/ember/crates/scafra\", default-features = false, features = [\"standard\", \"web\"] }\nserde = { version = \"1\", features = [\"derive\"] }\n\n[profile.release]\nlto = \"thin\"\ncodegen-units = 1\n",
+      "consumer_normal_closure_excluding_root": 137,
+      "release_binary_bytes_unstripped": 6913224,
+      "selected_capabilities": "standard",
+      "runtime": [
+        {
+          "scenario": "default",
+          "spawn_to_first_http_seconds": 0.030667982005979866,
+          "memory": [
+            "VmHWM:\t    6452 kB",
+            "VmRSS:\t    6452 kB"
+          ],
+          "shutdown_exit_code": 0
+        },
+        {
+          "scenario": "secure",
+          "spawn_to_first_http_seconds": 0.005949217971647158,
+          "memory": [
+            "VmHWM:\t    6332 kB",
+            "VmRSS:\t    6332 kB"
+          ],
+          "shutdown_exit_code": 0
+        },
+        {
+          "scenario": "secure-actuator",
+          "spawn_to_first_http_seconds": 0.005763950000982732,
+          "memory": [
+            "VmHWM:\t    6356 kB",
+            "VmRSS:\t    6356 kB"
+          ],
+          "shutdown_exit_code": 0
+        }
+      ],
+      "workspace_lock_unchanged": true,
+      "source_unchanged_during_measurement": true,
+      "new_external_versions_vs_before": [],
+      "removed_external_versions_vs_before": []
+    }
+  },
+  "acceptance": [
+    {
+      "criterion": "Generic configuration independent of optional runtime modules",
+      "status": "PASS"
+    },
+    {
+      "criterion": "HTTP without security/actuator/scheduler dependencies",
+      "status": "PASS"
+    },
+    {
+      "criterion": "JWT/JWKS dependencies optional",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Actuator optional",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Scheduler optional",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Core lifecycle usable without HTTP",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Documented facade Cargo features implemented",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Procedural macros support feature combinations",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Generated applications include only necessary modules",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Protected routes fail closed",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Invalid security configuration rejected",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Async initialization/rollback/shutdown preserved",
+      "status": "PASS"
+    },
+    {
+      "criterion": "CLI templates updated",
+      "status": "PASS"
+    },
+    {
+      "criterion": "External consumers pass",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Real startup/shutdown tests pass",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Dependency isolation independently verified",
+      "status": "PASS"
+    },
+    {
+      "criterion": "CI feature matrix implemented and local equivalents verified",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Declared MSRV and Linux x86_64 supported target verified",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Package/publish DAG verified without publication",
+      "status": "PASS"
+    },
+    {
+      "criterion": "API compatibility and migration documented",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Before/after measurements recorded",
+      "status": "PASS"
+    },
+    {
+      "criterion": "Required documentation updated",
+      "status": "PASS"
+    },
+    {
+      "criterion": "All relevant tests pass",
+      "status": "PASS"
+    }
+  ],
+  "additional_verification": [
+    {
+      "command": "cargo test -p scafra --features standard --test properties_environment",
+      "exit_code": 0,
+      "passed": 22
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test -p scafra-security --no-default-features --test features",
+      "exit_code": 0,
+      "passed": 8
+    },
+    {
+      "command": "cargo test -p scafra-security --all-features",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test --manifest-path examples/async-resource/Cargo.toml --offline",
+      "exit_code": 0,
+      "passed": 6
+    },
+    {
+      "command": "cargo test -p scafra-cli --test generated_projects generated_projects_serve_routes_and_shutdown_gracefully -- --ignored --exact",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test --offline (migrated temporary downstream copy with local framework patches)",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/arch103-consumers.py /var/tmp/scafra-103-consumers-verified --runtime --target-dir /var/tmp/scafra-103-live-matrix/target",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/arch103-negative.py --output /var/tmp/arch103-negative-20261022-final",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/arch103-package-check.py /var/tmp/scafra-arch103-packages-20261021 --offline --reuse",
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Single developer-host timing/memory samples; no statistical performance improvement claim",
+    "GitHub hosted workflows were not triggered (no push)",
+    "Actual crates.io upload/index propagation not exercised; normalized packages validated using local registry-source staging",
+    "Ignored registration doctest remains ignored",
+    "Worker supervision remains issue #49; BootUI retains runtime-owned extension task shutdown semantics"
+  ],
+  "superseded_failures": [
+    "CLI parallel tests initially exhausted tmpfs; full /var/tmp rerun passed",
+    "BootUI test-only config capabilities corrected; initial default check failure resolved",
+    "Malformed test-file prefix removed; compiler/Clippy failures resolved",
+    "Historical downstream BootUI peer metadata/snapshot test fixture migrated in temporary copy only",
+    "Baseline snapshots before final hardening superseded; source mutation detected and rejected as intended"
+  ]
+}

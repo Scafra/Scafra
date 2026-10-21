@@ -1,5 +1,5 @@
 use axum::Router;
-use scafra_security::AuthorizationPolicy;
+use scafra_foundation::AuthorizationPolicy;
 
 /// One route as declared by a controller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

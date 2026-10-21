@@ -4,6 +4,7 @@
 //! foundation, and shutdown policy contracts; it is not an application
 //! container, service locator, or event registry.
 
+mod authorization;
 mod backtrace;
 mod logging;
 
@@ -29,3 +30,8 @@ macro_rules! startup {
         ::tracing::info!(target: "scafra::startup", $($arg)*)
     };
 }
+
+pub use authorization::{
+    AuthorizationMode, AuthorizationPolicy, ControllerAuthorizationRegistration,
+    RouteAuthorizationMetadata,
+};

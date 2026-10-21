@@ -8,7 +8,7 @@ use std::{
 use clap::Parser;
 
 use crate::{
-    cli::{ApplicationKind, Cli, CommandKind},
+    cli::{ApplicationKind, Capability, Cli, CommandKind},
     filesystem::{
         escape_toml_basic_string, local_dependency, manifest_path, normalize_package_name,
         package_name,
@@ -98,7 +98,7 @@ fn rejects_destination_with_a_non_utf8_final_component() {
 #[test]
 fn reports_destination_metadata_errors_before_generation() {
     let error =
-        create_project(Path::new("invalid\0destination"), ApplicationKind::Web).unwrap_err();
+        create_project(Path::new("invalid\0destination"), ApplicationKind::Web, &[]).unwrap_err();
     assert!(error.to_string().contains("could not inspect destination"));
 }
 
@@ -113,7 +113,7 @@ fn refuses_to_follow_a_dangling_destination_symlink() {
     let target = root.join("missing-target");
     symlink(&target, &destination).unwrap();
 
-    let error = create_project(&destination, ApplicationKind::Web).unwrap_err();
+    let error = create_project(&destination, ApplicationKind::Web, &[]).unwrap_err();
 
     assert!(error
         .to_string()
@@ -161,7 +161,7 @@ fn generates_each_fixed_starter_shape() {
         ApplicationKind::Monolith,
     ] {
         let project = root.join(kind.as_str());
-        create_project(&project, kind).unwrap();
+        create_project(&project, kind, &[]).unwrap();
 
         for directory in STANDARD_DIRECTORIES {
             assert!(project.join(directory).is_dir(), "missing {directory}");
@@ -174,6 +174,7 @@ fn generates_each_fixed_starter_shape() {
 
     let web_manifest = fs::read_to_string(root.join("web/Cargo.toml")).unwrap();
     assert!(!web_manifest.contains("serde ="));
+    assert!(web_manifest.contains("default-features = false, features = [\"web\"]"));
     assert!(web_manifest.contains("[profile.release]\nlto = \"thin\"\ncodegen-units = 1"));
     assert!(
         fs::read_to_string(root.join("web/src/main/controllers/hello_controller.rs"))
@@ -204,7 +205,7 @@ fn generates_each_fixed_starter_shape() {
 fn refuses_to_overwrite_existing_destination() {
     let path = test_directory("existing");
     fs::create_dir_all(&path).unwrap();
-    let error = create_project(&path, ApplicationKind::Web).unwrap_err();
+    let error = create_project(&path, ApplicationKind::Web, &[]).unwrap_err();
     assert!(error
         .to_string()
         .contains("refusing to overwrite existing path"));
@@ -242,4 +243,44 @@ fn test_directory(name: &str) -> PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!("scafra-cli-{name}-{}-{nonce}", process::id()))
+}
+
+#[test]
+fn accepts_only_documented_optional_capabilities() {
+    let cli =
+        Cli::try_parse_from(["scafra", "new", "api", "--features", "security,actuator"]).unwrap();
+    match cli.command {
+        CommandKind::New { features, .. } => {
+            assert_eq!(features, vec![Capability::Security, Capability::Actuator])
+        }
+        _ => panic!("expected project generation"),
+    }
+    assert!(Cli::try_parse_from(["scafra", "new", "api", "--features", "unknown"]).is_err());
+}
+
+#[test]
+fn security_starters_enable_enforcement_and_require_external_credentials() {
+    let root = test_directory("features");
+    for capability in [
+        Capability::Security,
+        Capability::Jwt,
+        Capability::Jwks,
+        Capability::Standard,
+    ] {
+        let project = root.join(capability.as_str());
+        create_project(&project, ApplicationKind::Api, &[capability]).unwrap();
+        let manifest = fs::read_to_string(project.join("Cargo.toml")).unwrap();
+        let config = fs::read_to_string(project.join("src/resources/application.yaml")).unwrap();
+        assert!(manifest.contains("default-features = false"));
+        assert!(manifest.contains(&format!("\"{}\"", capability.as_str())));
+        assert!(manifest.contains("\"web\""));
+        assert!(config.contains("security:\n  enabled: true\n"));
+        assert_eq!(
+            config.contains("jwt:\n    enabled: true"),
+            capability != Capability::Security
+        );
+        assert!(!config.contains("secret:"));
+        assert!(!config.contains("bearer_token:"));
+    }
+    fs::remove_dir_all(root).unwrap();
 }

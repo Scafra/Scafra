@@ -170,6 +170,7 @@ pub(crate) fn expand_routes(
         quote!(router)
     };
     Ok(quote! {
+        ::scafra::__scafra_require_web! {
         #input
 
         impl #controller {
@@ -233,6 +234,7 @@ pub(crate) fn expand_routes(
                 controller: stringify!(#controller),
                 routes: #authorization_metadata_ident,
             }
+        }
         }
     })
 }

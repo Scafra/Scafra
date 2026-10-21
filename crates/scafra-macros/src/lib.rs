@@ -119,7 +119,7 @@ mod tests {
         let expanded = expand_main_item(input)
             .expect("valid main should expand")
             .to_string();
-        assert!(expanded.contains("build_router_and_resources"));
+        assert!(expanded.contains("build_router_with_options_and_resources"));
         assert!(expanded.contains("AsyncResourceSet :: shutdown"));
         assert!(expanded.contains("StartupFailure"));
     }

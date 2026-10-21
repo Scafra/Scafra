@@ -4,7 +4,9 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use scafra_config::{Config, ConfigError, ConfigLoader, ScafraConfig};
+#[cfg(all(feature = "standard", feature = "bootui"))]
+use scafra_config::ScafraConfig;
+use scafra_config::{Config, ConfigError, ConfigLoader};
 use serde::{Deserialize, Serialize};
 
 static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
@@ -218,6 +220,7 @@ fn environment_names_resolving_to_the_same_path_are_rejected() {
 }
 
 #[test]
+#[cfg(all(feature = "standard", feature = "bootui"))]
 fn environment_names_resolve_underscored_fields_and_dynamic_task_keys() {
     let root = TempRoot::new();
     let prefix = format!("SCFRA014_UNDERSCORES_{}", std::process::id());
@@ -282,6 +285,7 @@ fn environment_names_resolve_underscored_fields_and_dynamic_task_keys() {
 }
 
 #[test]
+#[cfg(all(feature = "standard", feature = "bootui"))]
 fn explicit_environment_paths_preserve_underscores_inside_fields() {
     let root = TempRoot::new();
     let prefix = format!("SCFRA014_EXPLICIT_PATH_{}", std::process::id());
@@ -348,11 +352,12 @@ fn ambiguous_and_unknown_environment_names_fail_deterministically() {
         Err(ConfigError::InvalidValue {
             path,
             source_kind
-        }) if path == "server_unknown_field" && source_kind == "environment variable name"
+        }) if path == "server.unknown_field" && source_kind == "unknown framework configuration field"
     ));
 }
 
 #[test]
+#[cfg(all(feature = "standard", feature = "bootui"))]
 fn secret_environment_values_stay_redacted_from_decode_diagnostics() {
     let root = TempRoot::new();
     let prefix = format!("SCFRA014_SECRET_REDACTION_{}", std::process::id());

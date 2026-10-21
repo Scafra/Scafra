@@ -1,5 +1,14 @@
 # HTTP authentication and authorization
 
+## Required Cargo capabilities
+
+Select `security` for Basic/static bearer, `jwt` for local token verification,
+or `jwks` for remote keys/discovery. HTTP alone does not link enforcement.
+Protected metadata without selected/enabled enforcement rejects router startup.
+Authorization declarations live in foundation with compatible web/security
+re-exports. See [modules](modules.md) for migration and guarantees.
+
+
 Scafra supports shared bearer tokens, HTTP Basic credentials, and JWT resource
 server validation. Route and controller policies use the configured
 authenticator; they do not introduce a second identity system.

@@ -1,10 +1,17 @@
+#![cfg(feature = "actuator")]
+
 use std::ffi::OsString;
 
 use scafra_config::{Config, ConfigLoader, ScafraConfig, ValidationError};
-use scafra_security::{BasicAuthConfig, JwtConfig};
+#[cfg(feature = "security")]
+use scafra_security::BasicAuthConfig;
+#[cfg(feature = "jwks")]
+use scafra_security::JwtConfig;
 
 const ACTUATOR_TOKEN_FIELD: &str = "actuator.security.bearer_token";
+#[cfg(feature = "security")]
 const APPLICATION_TOKEN_FIELD: &str = "security.bearer_token";
+#[cfg(feature = "security")]
 const BASIC_PASSWORD_SENTINEL: &str = "issue92-basic-password-sentinel";
 
 fn actuator_security_config(token: Option<&str>) -> ScafraConfig {
@@ -58,6 +65,7 @@ fn non_blank_actuator_bearer_token_passes_validation() {
 }
 
 #[test]
+#[cfg(feature = "security")]
 fn application_security_requires_an_authenticator_when_bearer_is_missing() {
     let mut missing_bearer = ScafraConfig::default();
     missing_bearer.security.enabled = true;
@@ -77,6 +85,7 @@ fn application_security_requires_an_authenticator_when_bearer_is_missing() {
 }
 
 #[test]
+#[cfg(feature = "jwks")]
 fn invalid_jwt_provider_configuration_reports_a_safe_category() {
     let sentinel = "provider-url-secret-sentinel";
     let mut config = ScafraConfig::default();
@@ -96,6 +105,7 @@ fn invalid_jwt_provider_configuration_reports_a_safe_category() {
 }
 
 #[test]
+#[cfg(feature = "security")]
 fn application_security_rejects_blank_bearer_even_with_complete_basic_auth() {
     for token in ["", " ", "   ", "\t", " \t "] {
         let mut config = ScafraConfig::default();
@@ -148,6 +158,7 @@ fn environment_actuator_tokens_use_the_same_validation_rules() {
 }
 
 #[test]
+#[cfg(feature = "security")]
 fn environment_application_bearer_tokens_use_the_same_blank_validation_rules() {
     let prefix = format!("SCFRA_ISSUE92_{}", std::process::id());
     let enabled_key = format!("{prefix}_SECURITY__ENABLED");

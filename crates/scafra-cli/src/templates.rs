@@ -2,7 +2,10 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::{cli::ApplicationKind, filesystem::local_dependency};
+use crate::{
+    cli::{ApplicationKind, Capability},
+    filesystem::local_dependency,
+};
 
 pub(crate) const STANDARD_DIRECTORIES: &[&str] = &[
     "src",
@@ -22,9 +25,34 @@ pub(crate) fn template_files(
     project: &Path,
     package_name: &str,
     kind: ApplicationKind,
+    features: &[Capability],
 ) -> Result<Vec<(&'static str, String)>> {
+    let mut selected = std::collections::BTreeSet::from(["web"]);
+    selected.extend(features.iter().map(|feature| feature.as_str()));
+    let selected = selected
+        .into_iter()
+        .map(|feature| format!("\"{feature}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = match local_dependency(project, "scafra")? {
+        Some(dependency) => dependency.trim_end_matches(" }").to_owned(),
+        None => format!("scafra = {{ version = \"{}\"", env!("CARGO_PKG_VERSION")),
+    };
     let scafra_dependency =
-        local_dependency(project, "scafra")?.unwrap_or_else(|| "scafra = \"0.1\"".to_owned());
+        format!("{source}, default-features = false, features = [{selected}] }}");
+    let mut configuration =
+        "server:\n  host: 127.0.0.1\n  port: 8080\nlogging:\n  level: info\n".to_owned();
+    let remote_jwt = features
+        .iter()
+        .any(|feature| matches!(feature, Capability::Jwks | Capability::Standard));
+    let jwt = remote_jwt || features.contains(&Capability::Jwt);
+    let security = jwt || features.contains(&Capability::Security);
+    if security {
+        configuration.push_str("security:\n  enabled: true\n");
+        if jwt {
+            configuration.push_str("  jwt:\n    enabled: true\n");
+        }
+    }
     let serde_dependency = if kind.needs_serde() {
         "serde = { version = \"1\", features = [\"derive\"] }\n"
     } else {
@@ -36,10 +64,7 @@ pub(crate) fn template_files(
 
     let mut files = vec![
         ("Cargo.toml", cargo_toml),
-        (
-            "src/resources/application.yaml",
-            "server:\n  host: 127.0.0.1\n  port: 8080\nlogging:\n  level: info\n".to_owned(),
-        ),
+        ("src/resources/application.yaml", configuration),
         (
             "src/main.rs",
             "#[scafra::main]\nasync fn main() {}\n".to_owned(),
@@ -275,11 +300,23 @@ impl CatalogController {
 fn project_readme(kind: ApplicationKind) -> String {
     const TEMPLATE: &str = r#"# Scafra {{KIND}} application
 
-This project was generated as {{DESCRIPTION}}. It uses the standard Scafra
+This project was generated as {{DESCRIPTION}}. It uses the Scafra
 facade, compile-time source discovery, and `#[scafra::main]` entry point.
 
 The canonical application kinds are `web`, `api`, `service`, and `monolith`.
 The CLI also accepts `microservice` as an alias for `service`.
+Starters explicitly select `web` with empty framework defaults. Add capabilities
+when generating with `--features security`, `--features jwt`,
+`--features jwks`, or a comma-delimited selection such as `actuator,scheduler`.
+Supported names are web, security, jwt, jwks, actuator, scheduler, bootui, standard.
+Security/JWT selections enable enforcement in application.yaml and deliberately
+require credentials before startup. For shared bearer security, set
+`SCAFRA_SECURITY_BEARER_TOKEN`; for local JWT, set
+`SCAFRA_SECURITY_JWT_SECRET`; for remote JWT/JWKS, set
+`SCAFRA_SECURITY_JWT_JWK_SET_URI` (or configure the issuer). Never commit secrets.
+The generated application refuses startup until its selected authentication
+configuration is complete. Features compose additively; inspect Cargo.toml
+before adding other dependencies that could enable more framework modules.
 Kind selection happens only while this project is generated; the application
 does not receive a runtime kind setting or select components from a registry.
 

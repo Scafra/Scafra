@@ -1,5 +1,13 @@
 # Generated projects
 
+## Modular generation
+
+Generated manifests select `web` explicitly; `--features` adds capabilities.
+Main/controller/routes require HTTP, while service/bean/config and core graph
+composition can be used without HTTP. Generated optional fragments dispatch
+through feature-selected facade adapters. See [modules](modules.md).
+
+
 The `scafra new` command creates ordinary, inspectable Rust files. It does not
 generate a hidden application bundle or require a special editor.
 

@@ -1,5 +1,15 @@
 # Contributing
 
+## Isolated capability checks
+
+Workspace all-features checks are supplemented by external consumers:
+`python3 scripts/arch103-consumers.py /var/tmp/consumers-NEW --runtime` and
+`python3 scripts/arch103-negative.py --output /var/tmp/negatives-NEW`.
+Populate the cache first with `cargo fetch --locked`. Use `TMPDIR=/var/tmp`
+when running the full test suite on machines with a small tmpfs. See
+[module verification](modules.md#cli-and-verification).
+
+
 Scafra is a modular Rust workspace. Contributions are welcome in code,
 documentation, tests, examples, diagnostics, and generated starter templates.
 

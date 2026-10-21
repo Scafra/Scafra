@@ -1,3 +1,4 @@
+#![cfg(feature = "actuator")]
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},

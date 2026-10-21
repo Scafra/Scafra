@@ -44,6 +44,7 @@ pub(crate) fn expand_controller(attr: TokenStream, item: TokenStream) -> Result<
     let policy = arguments.policy.to_tokens();
     let prefix = &arguments.prefix;
     Ok(quote! {
+        ::scafra::__scafra_require_web! {
         #input
 
         impl ::scafra::web::ControllerPrefix for #ident {
@@ -67,6 +68,7 @@ pub(crate) fn expand_controller(attr: TokenStream, item: TokenStream) -> Result<
                 name: stringify!(#ident),
                 kind: ::scafra::core::ComponentKind::Controller,
             }
+        }
         }
     })
 }

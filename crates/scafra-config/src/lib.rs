@@ -11,9 +11,13 @@ pub use errors::ConfigError;
 pub use extensions::ConfiguredExtensionRegistration;
 pub use models::{BootUiConfig, ScafraConfig, ServerConfig, StartupConfig, ValidationError};
 pub use scafra_foundation::{BacktraceMode, LogLevel, LoggingConfig};
+#[cfg(feature = "scheduler")]
 pub use scafra_scheduler::{SchedulerConfig, SchedulerConfigError};
+#[cfg(feature = "security")]
 pub use scafra_security::{JwtConfig, SecurityConfig};
-pub use sources::{load_yaml, Config, ConfigLoader, ConfigProperties, Properties};
+pub use sources::{
+    load_yaml, Config, ConfigCapabilities, ConfigLoader, ConfigProperties, Properties,
+};
 
 #[cfg(test)]
 pub(crate) use merge::validate_profile;

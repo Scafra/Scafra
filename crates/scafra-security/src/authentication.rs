@@ -1,6 +1,8 @@
 //! Bearer and Basic credential parsing and principal construction.
 
-use crate::{config::SecurityConfig, jwks::JwksCache, jwt};
+#[cfg(feature = "jwt")]
+use crate::jwt;
+use crate::{config::SecurityConfig, jwks::JwksCache};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use std::collections::HashSet;
 
@@ -13,9 +15,10 @@ pub(super) struct Principal {
 
 pub(super) async fn authenticate(
     config: &SecurityConfig,
-    jwks: &JwksCache,
+    _jwks: &JwksCache,
     authorization: Option<&str>,
 ) -> Option<Principal> {
+    config.validate().ok()?;
     let authorization = authorization?;
     let (scheme, credential) = authorization.split_once(' ')?;
     if credential.is_empty() || credential.bytes().any(|byte| byte.is_ascii_whitespace()) {
@@ -24,7 +27,14 @@ pub(super) async fn authenticate(
 
     if scheme.eq_ignore_ascii_case("bearer") {
         if config.jwt.enabled {
-            return jwt::validate_jwt(config, jwks, credential).await;
+            #[cfg(feature = "jwt")]
+            {
+                return jwt::validate_jwt(config, _jwks, credential).await;
+            }
+            #[cfg(not(feature = "jwt"))]
+            {
+                return None;
+            }
         }
         if config.bearer_token.as_deref() == Some(credential) {
             return Some(Principal::default());

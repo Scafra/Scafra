@@ -7,12 +7,20 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Axum and Tokio integration for Scafra"
 
+[features]
+default = []
+security = ["dep:scafra-security"]
+actuator = ["dep:scafra-actuator"]
+jwt = ["security", "scafra-security/jwt"]
+jwks = ["jwt", "scafra-security/jwks"]
+standard = ["security", "actuator", "jwks"]
+
 [dependencies]
 axum.workspace = true
 scafra-core.workspace = true
 scafra-foundation.workspace = true
-scafra-actuator.workspace = true
-scafra-security.workspace = true
+scafra-actuator = { workspace = true, optional = true }
+scafra-security = { workspace = true, optional = true }
 inventory.workspace = true
 serde.workspace = true
 thiserror.workspace = true

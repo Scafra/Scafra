@@ -25,10 +25,33 @@ pub fn layer_with_route_policies(
     config: SecurityConfig,
     policies: Vec<RouteAuthorizationMetadata>,
 ) -> Router {
-    if !config.enabled && policies.is_empty() {
+    let invalid_configuration = config.validate().is_err();
+    if !config.enabled && policies.is_empty() && !invalid_configuration {
         return router;
     }
     let state = Arc::new(SecurityState {
+        invalid_policies: invalid_configuration || {
+            let mut seen = std::collections::HashSet::new();
+            policies.iter().any(|policy| {
+                let path = crate::policy::join_paths(policy.prefix, policy.path);
+                !seen.insert((policy.method.to_ascii_uppercase(), path))
+                    || [policy.controller_policy, policy.route_policy]
+                        .iter()
+                        .any(|declaration| {
+                            (declaration.mode == crate::AuthorizationMode::Public
+                                && (!declaration.role_groups.is_empty()
+                                    || !declaration.required_scopes.is_empty()))
+                                || declaration.role_groups.iter().any(|group| {
+                                    group.is_empty()
+                                        || group.iter().any(|role| role.trim().is_empty())
+                                })
+                                || declaration
+                                    .required_scopes
+                                    .iter()
+                                    .any(|scope| scope.trim().is_empty())
+                        })
+            })
+        },
         config,
         policies: RoutePolicyMatcher::new(policies),
         jwks: JwksCache::new(),
@@ -40,6 +63,7 @@ pub fn layer_with_route_policies(
 }
 
 struct SecurityState {
+    invalid_policies: bool,
     config: SecurityConfig,
     policies: RoutePolicyMatcher,
     jwks: JwksCache,
@@ -50,6 +74,9 @@ async fn authorize_request(
     request: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
+    if state.invalid_policies {
+        return denied(&state, StatusCode::UNAUTHORIZED);
+    }
     // Keep the security layer installed when generated route metadata exists,
     // but skip route matching when the application has no protected routes.
     // In particular, the common disabled-security/inherited-policy case does

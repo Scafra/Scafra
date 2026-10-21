@@ -101,6 +101,7 @@ pub enum WebError {
     Server(#[source] std::io::Error),
 }
 
+#[cfg(feature = "actuator")]
 impl From<scafra_actuator::HealthRegistryError> for WebError {
     fn from(error: scafra_actuator::HealthRegistryError) -> Self {
         Self::Server(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))

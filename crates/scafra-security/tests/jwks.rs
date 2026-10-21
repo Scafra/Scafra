@@ -1,3 +1,5 @@
+#![cfg(feature = "jwks")]
+
 use axum::{
     body::Body,
     extract::State,

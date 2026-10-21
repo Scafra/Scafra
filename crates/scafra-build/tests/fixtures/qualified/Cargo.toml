@@ -7,7 +7,7 @@ publish = false
 [workspace]
 
 [dependencies]
-scafra = { path = "../../../../scafra" }
+scafra = { path = "../../../../scafra", features = ["standard"] }
 
 [build-dependencies]
 scafra-build = { path = "../../../../scafra-build" }

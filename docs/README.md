@@ -8,8 +8,11 @@ Axum, Tokio, Tower, Serde, and `tracing`.
 
 - [Getting started](getting-started.md) — create and run your first Scafra
   application.
+- [Module and feature reference](modules.md) — implemented capabilities and migration.
 - [Architecture](architecture.md) — understand the workspace, application
   model, and design boundaries.
+- [Modular framework proposal (ARCH-01 Phase 0)](architecture/arch-01/README.md)
+  — dependency audit, proposed ADR/features, measured baseline and implementation roadmap.
 - [Generated code](generated-code.md) — see what `scafra new` creates and how
   source discovery works.
 - [Configuration](configuration.md) — resolve configuration deterministically

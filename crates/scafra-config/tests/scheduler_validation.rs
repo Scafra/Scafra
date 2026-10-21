@@ -1,3 +1,5 @@
+#![cfg(feature = "scheduler")]
+
 use scafra_config::{Config, ScafraConfig};
 use scafra_scheduler::ScheduledTaskConfig;
 

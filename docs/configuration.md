@@ -1,5 +1,13 @@
 # Configuration resolution
 
+## Configuration capability selection
+
+Generic config has no integration defaults. Reserved framework sections must
+match compiled capabilities; unknown framework fields and unavailable sections
+fail before merge. The standard runner further narrows capabilities to its own
+features despite Cargo unification. See [modules](modules.md) for details.
+
+
 Scafra resolves configuration before application resources, route construction,
 or listener startup. A source read, parse, decode, or validation error stops
 startup with a typed `ConfigError` wrapped by `StartupError::Config`.

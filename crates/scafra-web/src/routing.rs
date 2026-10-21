@@ -5,6 +5,7 @@ use axum::{extract::DefaultBodyLimit, http::StatusCode, Router};
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 
 use crate::{errors::WebError, registration::ControllerRegistration};
+#[cfg(feature = "actuator")]
 use scafra_actuator::{ActuatorConfig, HealthRegistry};
 
 /// Joins a controller prefix and method path while preserving Axum route
@@ -20,9 +21,122 @@ pub fn join_paths(prefix: &str, path: &str) -> String {
     }
 }
 
-/// Builds the application router from all statically linked controllers.
+/// Selected integrations and common HTTP middleware settings.
+#[derive(Debug, Clone, Default)]
+pub struct RouterOptions {
+    #[cfg(feature = "actuator")]
+    pub actuator: ActuatorConfig,
+    #[cfg(feature = "security")]
+    pub security: scafra_security::SecurityConfig,
+    pub request_timeout: Option<Duration>,
+}
+
+/// Builds statically registered controllers using default integration options.
 pub fn build_router() -> Result<Router, WebError> {
-    build_router_with_actuator(&ActuatorConfig::default())
+    build_router_with_options(&RouterOptions::default())
+}
+
+/// Creates only the selected operational endpoints.
+pub fn operational_router(options: &RouterOptions) -> Result<Router, WebError> {
+    #[cfg(feature = "actuator")]
+    {
+        Ok(scafra_actuator::try_router(&options.actuator)?)
+    }
+    #[cfg(not(feature = "actuator"))]
+    {
+        let _ = options;
+        Ok(Router::new())
+    }
+}
+
+/// Builds registered controllers, validates declarations, then applies middleware.
+pub fn build_router_with_options(options: &RouterOptions) -> Result<Router, WebError> {
+    let routes = default_controller_metadata(&[]);
+    validate_routes_with_options(&routes, options)?;
+    let router = register_default_controllers(operational_router(options)?, &[]);
+    finish_router_with_options(router, &routes, options)
+}
+
+/// Validates route protection even when the security implementation is absent.
+pub fn finish_router_with_options(
+    router: Router,
+    routes: &[crate::registration::RouteMetadata],
+    options: &RouterOptions,
+) -> Result<Router, WebError> {
+    validate_routes_with_options(routes, options)?;
+    let policies = authorization_metadata_for(routes);
+    validate_authorization_metadata(&policies)?;
+    #[cfg(feature = "security")]
+    validate_security_config(&options.security, &policies)?;
+    #[cfg(not(feature = "security"))]
+    if policies.iter().any(policy_requires_security) {
+        return Err(security_configuration_error(
+            "protected routes require the security Cargo feature",
+        ));
+    }
+    let router = router.layer(DefaultBodyLimit::max(1024 * 1024));
+    #[cfg(feature = "security")]
+    let router =
+        scafra_security::layer_with_route_policies(router, options.security.clone(), policies);
+    let router = with_request_timeout(router, options.request_timeout);
+    Ok(router.layer(TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
+        tracing::debug_span!("request", method = %request.method(), version = ?request.version())
+    })))
+}
+
+fn policy_requires_security(policy: &scafra_foundation::RouteAuthorizationMetadata) -> bool {
+    use scafra_foundation::AuthorizationMode;
+    if policy.route_policy.mode == AuthorizationMode::Public {
+        return false;
+    }
+    if policy.route_policy.mode == AuthorizationMode::Protected {
+        return true;
+    }
+    policy.controller_policy.mode == AuthorizationMode::Protected
+        || !policy.controller_policy.role_groups.is_empty()
+        || !policy.controller_policy.required_scopes.is_empty()
+        || !policy.route_policy.role_groups.is_empty()
+        || !policy.route_policy.required_scopes.is_empty()
+}
+
+fn validate_authorization_metadata(
+    policies: &[scafra_foundation::RouteAuthorizationMetadata],
+) -> Result<(), WebError> {
+    use scafra_foundation::AuthorizationMode;
+    let mut seen = std::collections::HashSet::new();
+    for metadata in policies {
+        if !seen.insert((
+            metadata.method.to_ascii_uppercase(),
+            join_paths(metadata.prefix, metadata.path),
+        )) {
+            return Err(security_configuration_error(
+                "duplicate authorization metadata for one method and path",
+            ));
+        }
+        for policy in [metadata.controller_policy, metadata.route_policy] {
+            if policy.mode == AuthorizationMode::Public
+                && (!policy.role_groups.is_empty() || !policy.required_scopes.is_empty())
+            {
+                return Err(security_configuration_error(
+                    "public policy cannot require roles or scopes",
+                ));
+            }
+            if policy
+                .role_groups
+                .iter()
+                .any(|group| group.is_empty() || group.iter().any(|role| role.trim().is_empty()))
+                || policy
+                    .required_scopes
+                    .iter()
+                    .any(|scope| scope.trim().is_empty())
+            {
+                return Err(security_configuration_error(
+                    "authorization roles and scopes must be nonempty",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Builds the application router with configurable operational endpoints and
@@ -30,8 +144,12 @@ pub fn build_router() -> Result<Router, WebError> {
 ///
 /// Use [`build_router_with_actuator_and_health_registry`] to pass checks owned
 /// by one application graph.
+#[cfg(feature = "actuator")]
 pub fn build_router_with_actuator(actuator: &ActuatorConfig) -> Result<Router, WebError> {
-    build_router_with_actuator_and_security(actuator, &scafra_security::SecurityConfig::default())
+    build_router_with_options(&RouterOptions {
+        actuator: actuator.clone(),
+        ..Default::default()
+    })
 }
 
 /// Builds the application router with legacy process-wide health registrations
@@ -39,6 +157,7 @@ pub fn build_router_with_actuator(actuator: &ActuatorConfig) -> Result<Router, W
 ///
 /// Use [`build_router_with_actuator_and_health_registry_and_security`] to pass
 /// checks owned by one application graph.
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub fn build_router_with_actuator_and_security(
     actuator: &ActuatorConfig,
     security: &scafra_security::SecurityConfig,
@@ -47,19 +166,24 @@ pub fn build_router_with_actuator_and_security(
 }
 
 /// Builds the default application router with checks owned by one graph.
+#[cfg(feature = "actuator")]
 pub fn build_router_with_actuator_and_health_registry(
     actuator: &ActuatorConfig,
     registry: HealthRegistry,
 ) -> Result<Router, WebError> {
-    build_router_with_actuator_and_health_registry_and_security(
-        actuator,
-        registry,
-        &scafra_security::SecurityConfig::default(),
-    )
+    let options = RouterOptions {
+        actuator: actuator.clone(),
+        ..Default::default()
+    };
+    let routes = default_controller_metadata(&[]);
+    validate_routes_with_options(&routes, &options)?;
+    let router = scafra_actuator::router_with_health_registry(actuator, registry)?;
+    finish_router_with_options(register_default_controllers(router, &[]), &routes, &options)
 }
 
 /// Builds the default application router with graph-scoped health checks and
 /// the supplied application security configuration.
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub fn build_router_with_actuator_and_health_registry_and_security(
     actuator: &ActuatorConfig,
     registry: HealthRegistry,
@@ -69,6 +193,7 @@ pub fn build_router_with_actuator_and_health_registry_and_security(
     build_router_with_actuator_router(router, actuator, security, None)
 }
 
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub(crate) fn build_router_with_timeout(
     actuator: &ActuatorConfig,
     security: &scafra_security::SecurityConfig,
@@ -78,6 +203,7 @@ pub(crate) fn build_router_with_timeout(
     build_router_with_actuator_router(router, actuator, security, request_timeout)
 }
 
+#[cfg(all(feature = "actuator", feature = "security"))]
 fn build_router_with_actuator_router(
     router: Router,
     actuator: &ActuatorConfig,
@@ -90,8 +216,8 @@ fn build_router_with_actuator_router(
     finish_router(router, &routes, actuator, security, request_timeout)
 }
 
-/// Applies standard route validation and middleware to a router whose
-/// controller instances were constructed by typed application composition.
+/// Compatibility wrapper for integrated applications.
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub fn finish_router(
     router: Router,
     routes: &[crate::registration::RouteMetadata],
@@ -99,29 +225,21 @@ pub fn finish_router(
     security: &scafra_security::SecurityConfig,
     request_timeout: Option<Duration>,
 ) -> Result<Router, WebError> {
-    validate_routes(routes, actuator)?;
-    let route_policies = authorization_metadata_for(routes);
-    validate_security_config(security, &route_policies)?;
-    let router = router.layer(DefaultBodyLimit::max(1024 * 1024));
-
-    let router =
-        scafra_security::layer_with_route_policies(router, security.clone(), route_policies);
-    let router = with_request_timeout(router, request_timeout);
-    Ok(router.layer(TraceLayer::new_for_http().make_span_with(
-        |request: &axum::http::Request<_>| {
-            tracing::debug_span!(
-                "request",
-                method = %request.method(),
-                version = ?request.version(),
-            )
+    finish_router_with_options(
+        router,
+        routes,
+        &RouterOptions {
+            actuator: actuator.clone(),
+            security: security.clone(),
+            request_timeout,
         },
-    )))
+    )
 }
 
 fn authorization_metadata_for(
     routes: &[crate::registration::RouteMetadata],
-) -> Vec<scafra_security::RouteAuthorizationMetadata> {
-    inventory::iter::<scafra_security::ControllerAuthorizationRegistration>()
+) -> Vec<scafra_foundation::RouteAuthorizationMetadata> {
+    inventory::iter::<scafra_foundation::ControllerAuthorizationRegistration>()
         .flat_map(|registration| registration.routes.iter().copied())
         .filter(|policy| {
             routes.iter().any(|route| {
@@ -134,22 +252,13 @@ fn authorization_metadata_for(
         .collect()
 }
 
+#[cfg(feature = "security")]
 fn validate_security_config(
     security: &scafra_security::SecurityConfig,
-    policies: &[scafra_security::RouteAuthorizationMetadata],
+    policies: &[scafra_foundation::RouteAuthorizationMetadata],
 ) -> Result<(), WebError> {
-    if security.enabled {
-        security.validate().map_err(security_configuration_error)?;
-    }
-    let has_protected_route = policies.iter().any(|policy| {
-        if policy.route_policy.mode == scafra_security::AuthorizationMode::Public {
-            false
-        } else if policy.route_policy.mode == scafra_security::AuthorizationMode::Protected {
-            true
-        } else {
-            policy.controller_policy.mode == scafra_security::AuthorizationMode::Protected
-        }
-    });
+    security.validate().map_err(security_configuration_error)?;
+    let has_protected_route = policies.iter().any(policy_requires_security);
     if has_protected_route && !security.enabled {
         return Err(security_configuration_error(
             "security must be enabled when a controller or route requires authentication",
@@ -165,18 +274,36 @@ fn security_configuration_error(reason: &'static str) -> WebError {
     ))
 }
 
-/// Validates route metadata before any router merge occurs.
+/// Compatibility validation with explicit actuator configuration.
+#[cfg(feature = "actuator")]
 pub fn validate_routes(
     routes: &[crate::registration::RouteMetadata],
     actuator: &ActuatorConfig,
 ) -> Result<(), WebError> {
+    validate_routes_with_options(
+        routes,
+        &RouterOptions {
+            actuator: actuator.clone(),
+            ..Default::default()
+        },
+    )
+}
+
+/// Checks collisions against endpoints owned by the selected integrations.
+pub fn validate_routes_with_options(
+    routes: &[crate::registration::RouteMetadata],
+    options: &RouterOptions,
+) -> Result<(), WebError> {
     let mut seen = HashMap::<(String, String), &'static str>::new();
-    for (method, path) in scafra_actuator::reserved_routes(actuator) {
+    #[cfg(feature = "actuator")]
+    for (method, path) in scafra_actuator::reserved_routes(&options.actuator) {
         seen.insert(
             ((*method).to_owned(), (*path).to_owned()),
             "scafra-actuator",
         );
     }
+    #[cfg(not(feature = "actuator"))]
+    let _ = options;
     for route in routes {
         let key = (
             route.method.to_owned(),

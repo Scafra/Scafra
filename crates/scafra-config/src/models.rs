@@ -1,7 +1,10 @@
 use crate::sources::Config;
+#[cfg(feature = "actuator")]
 use scafra_actuator::ActuatorConfig;
 use scafra_foundation::LoggingConfig;
+#[cfg(feature = "scheduler")]
 use scafra_scheduler::SchedulerConfig;
+#[cfg(feature = "security")]
 use scafra_security::SecurityConfig;
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ServerConfig {
@@ -90,14 +93,18 @@ pub struct ScafraConfig {
     pub server: ServerConfig,
     #[serde(default)]
     pub logging: LoggingConfig,
+    #[cfg(feature = "actuator")]
     #[serde(default)]
     pub actuator: ActuatorConfig,
     #[serde(default)]
     pub startup: StartupConfig,
+    #[cfg(feature = "scheduler")]
     #[serde(default)]
     pub scheduler: SchedulerConfig,
+    #[cfg(feature = "security")]
     #[serde(default)]
     pub security: SecurityConfig,
+    #[cfg(feature = "bootui")]
     #[serde(default)]
     pub bootui: BootUiConfig,
 }
@@ -124,6 +131,7 @@ impl Config for ScafraConfig {
                 message: "must be greater than zero when configured".to_owned(),
             });
         }
+        #[cfg(feature = "scheduler")]
         if let Err(error) = self.scheduler.validate() {
             let (field, message) = match error {
                 scafra_scheduler::SchedulerConfigError::UnknownTask => (
@@ -149,6 +157,7 @@ impl Config for ScafraConfig {
             };
             return Err(ValidationError { field, message });
         }
+        #[cfg(feature = "actuator")]
         if self.actuator.security.enabled
             && self
                 .actuator
@@ -163,15 +172,18 @@ impl Config for ScafraConfig {
                     .to_owned(),
             });
         }
+        #[cfg(feature = "security")]
         if let Err(reason) = self.security.validate() {
             return Err(security_validation_error(reason));
         }
+        #[cfg(feature = "bootui")]
         if self.bootui.port == 0 {
             return Err(ValidationError {
                 field: "bootui.port",
                 message: "must be greater than zero".to_owned(),
             });
         }
+        #[cfg(feature = "bootui")]
         if !self.bootui.path.starts_with('/') {
             return Err(ValidationError {
                 field: "bootui.path",
@@ -186,8 +198,15 @@ impl Config for ScafraConfig {
     }
 }
 
+#[cfg(feature = "security")]
 fn security_validation_error(reason: &'static str) -> ValidationError {
     let (field, message) = match reason {
+        "JWT configuration requires the `jwt` feature" => {
+            ("security.jwt", "requires the jwt Cargo feature")
+        }
+        "remote JWT configuration requires the `jwks` feature" => {
+            ("security.jwt", "requires the jwks Cargo feature")
+        }
         "the bearer token must not be empty or whitespace-only" => (
             "security.bearer_token",
             "must not be empty or whitespace-only",
