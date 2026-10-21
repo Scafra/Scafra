@@ -93,3 +93,13 @@ it into an owned managed resource is a separate scoped follow-up if maintainers
 require it; preserve current behavior and record this limitation while isolating
 dependencies. Debug reload currently force-kills its child; do not conflate that
 behavior with standard graceful shutdown.
+
+## Implemented route-local correction
+
+The Phase0 ownership proposal above is historical. Foundation retains neutral
+policy declarations; generated MethodRouter guards now enforce concrete metadata.
+New `finish_managed_router`/`FinalizedRouter` and finalized runner/resource APIs
+support nested public overrides without re-finalization. Legacy raw APIs retain
+global enforcement. Managed composition explicitly guards handwritten routes
+before merging; generated graph inventory adapters have an isolated local legacy
+security boundary. See [current review](final-review.md) and [migration](../../modules.md).

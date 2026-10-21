@@ -272,3 +272,15 @@ The configuration types retain their existing serde shape and crate-root
 imports. Their `Debug` representation now redacts credential values; code that
 compared the old debug-formatted output should account for that intentional
 diagnostic change.
+
+## Authorization through router composition
+
+Generated controllers carry route-local guards: authentication alone cannot
+satisfy role/scope declarations, and nesting cannot remove those declarations.
+Use `web::finish_managed_router` and `run_with_finalized_router` for composed
+controllers and nested public overrides. Handwritten routes merged into that
+explicit managed path require `web::guard_axum_router` when application-wide
+security is desired. Existing raw/global APIs remain globally enforced; their
+outer layer may conservatively deny nested public routes. See
+[composition and migration](modules.md#configuration-and-fail-closed-security).
+Global permit rules use the original request URI, not Axum's stripped nested URI.

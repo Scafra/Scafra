@@ -174,6 +174,17 @@ fn apply_middleware(
     routes: &[crate::registration::RouteMetadata],
     options: &RouterOptions,
 ) -> Result<Router, WebError> {
+    let router = security_middleware(router, routes, options)?;
+    Ok(http_middleware(router, options))
+}
+
+fn security_middleware(
+    router: Router,
+    routes: &[crate::registration::RouteMetadata],
+    options: &RouterOptions,
+) -> Result<Router, WebError> {
+    #[cfg(not(feature = "security"))]
+    let _ = options;
     let policies = authorization_metadata_for(routes);
     validate_authorization_metadata(&policies)?;
     #[cfg(feature = "security")]
@@ -187,7 +198,7 @@ fn apply_middleware(
     #[cfg(feature = "security")]
     let router =
         scafra_security::layer_with_route_policies(router, options.security.clone(), policies);
-    Ok(http_middleware(router, options))
+    Ok(router)
 }
 
 fn http_middleware(router: Router, options: &RouterOptions) -> Router {
@@ -446,6 +457,33 @@ pub fn register_default_controllers(mut router: Router, composed_controllers: &[
         router = (registration.register)(router);
     }
     router
+}
+
+/// Compatibility bridge for inventory adapters in managed graph composition.
+///
+/// Handwritten adapters need their existing global/metadata enforcement even
+/// though generated controllers carry local guards. Install each adapter's
+/// security at its own routing boundary before merging, so Axum nesting strips
+/// the mount prefix before any legacy metadata lookup. The outer application
+/// context remains authoritative and supplies the shared verifier/cache.
+#[doc(hidden)]
+pub fn register_default_controllers_with_options(
+    mut router: Router,
+    composed_controllers: &[&str],
+    options: &RouterOptions,
+) -> Result<Router, WebError> {
+    for registration in inventory::iter::<ControllerRegistration>() {
+        if composed_controllers.contains(&registration.controller) {
+            continue;
+        }
+        let registered = (registration.register)(Router::new());
+        router = router.merge(security_middleware(
+            registered,
+            registration.routes,
+            options,
+        )?);
+    }
+    Ok(router)
 }
 
 /// Returns route metadata for linked controllers, excluding controllers that

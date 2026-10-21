@@ -148,3 +148,27 @@ fn explicit_public_override_remains_supported() {
     )
     .is_ok());
 }
+
+#[tokio::test]
+async fn route_local_guard_cannot_be_removed_by_omitting_finalization_or_security() {
+    let router = Router::new().route(
+        "/protected",
+        get(|| async { "must not execute" }).layer(axum::middleware::from_fn(|request, next| {
+            scafra_web::__private::authorize_route(
+                request,
+                next,
+                metadata("/protected", AuthorizationPolicy::protected()),
+            )
+        })),
+    );
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/protected")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}

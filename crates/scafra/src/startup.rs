@@ -26,8 +26,10 @@ pub async fn run() -> std::result::Result<(), StartupError> {
 /// startup, so providers can use configured values without global state.
 /// The server finalizes linked controller policies before binding, even when
 /// the supplied router was assembled using low-level registration adapters.
-/// Preserve declared controller prefixes; arbitrary Axum nesting/path rewrites
-/// do not rewrite static role/scope metadata.
+/// Generated route-local guards preserve roles/scopes after nesting. This legacy
+/// boundary also applies global security; use `run_with_finalized_router` and
+/// `web::finish_managed_router` for nested explicit public overrides without
+/// reinstalling middleware.
 pub async fn run_with_router<F>(build_router: F) -> std::result::Result<(), StartupError>
 where
     F: FnOnce(&ScafraConfig) -> std::result::Result<axum::Router, StartupError>,

@@ -1,4 +1,4 @@
-# Proposed external consumer acceptance matrix
+# External consumer acceptance matrix
 
 **Implemented feature contract.** Default follows ADR's proposed
 empty default. All rows require separate consumer roots outside the workspace,
@@ -7,7 +7,7 @@ Count package identities once (name/version), not repeated tree lines. Inspect
 feature trees when an unexpected edge appears. Normal trees include proc-macro
 host dependencies; record build edges separately rather than calling them runtime.
 
-| Consumer | Proposed facade features (defaults off except default row) | Normal packages that must be absent | Behavior required |
+| Consumer | Facade features (defaults off except default row) | Normal packages that must be absent | Behavior required |
 | --- | --- | --- | --- |
 | Minimal | none | web, Axum, security, actuator, scheduler, BootUI, jsonwebtoken, reqwest | Core hooks, component/bean and typed properties compile/use without HTTP |
 | Direct generic config | direct scafra-config, no defaults | security, actuator, scheduler, Axum, jsonwebtoken, reqwest | #75/#78 and custom application namespaces |
@@ -15,6 +15,8 @@ host dependencies; record build edges separately rather than calling them runtim
 | Web only | web | security, actuator, scheduler, BootUI, jsonwebtoken, reqwest | Generated main/controller, HTTP 200, limits/timeout/tracing, shutdown; protected declaration fails before serving |
 | Secure web | security (implies web) | actuator, scheduler, BootUI, jsonwebtoken, reqwest | Basic/static bearer auth, public overrides, missing/invalid auth denial, role/scope policy |
 | Local JWT | jwt | actuator, scheduler, BootUI, reqwest | Verify local tokens; reject remote config |
+| Nested controllers | jwt | actuator, scheduler, BootUI, reqwest | Actual local-policy guards, role/scope denial, public overrides, original URI permit rules, pre/post-finalization nesting, TCP/SIGTERM |
+| Inventory compatibility | security | actuator, scheduler, BootUI, jsonwebtoken, reqwest | Generated main secures handwritten inventory routes and preserves routes(default) public overrides |
 | Remote JWT | jwks | actuator, scheduler, BootUI | Issuer/JWKS verification, refresh, negative signatures/cache expiry |
 | Health API | web + actuator | security, scheduler, BootUI, jsonwebtoken, reqwest | Health/live/ready endpoints only when selected in config, own token guard, unknown check startup failure |
 | Scheduler/core | scheduler | web, Axum, security, actuator, BootUI, jsonwebtoken, reqwest | Register/start/stop scheduled tasks with application-owned runtime; no worker-runner claim |
@@ -43,7 +45,7 @@ python3 scripts/arch103-consumers.py /var/tmp/arch103-consumers-NEW --runtime
 python3 scripts/arch103-negative.py --output /var/tmp/arch103-negatives-NEW
 ```
 
-The collector always enables actual requested features and enforces forbidden
+The fifteen-case collector always enables actual requested features and enforces forbidden
 normal dependencies. `--proposed` remains a compatibility flag for older commands;
 it no longer means an expected failure. `--case NAME` selects one independent
 consumer. Runtime mode builds and starts binaries, sends loopback requests,

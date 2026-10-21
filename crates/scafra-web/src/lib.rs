@@ -8,8 +8,10 @@
 //! Use [`RouterOptions`] to compose only the integrations compiled into the
 //! application. Authorization declarations always remain available: router
 //! construction rejects protected routes when security is absent or disabled.
-//! Handwritten Axum routers remain an explicit interoperability escape hatch;
-//! callers supplying raw routers are responsible for their route metadata.
+//! Generated route-local guards preserve protection through Axum composition.
+//! [`finish_managed_router`] explicitly composes them with a shared context;
+//! handwritten routes need [`guard_axum_router`] before merging. Legacy finish
+//! and raw serving APIs retain application-wide enforcement for arbitrary routes.
 
 mod errors;
 mod json;
@@ -29,6 +31,7 @@ pub use tower;
 #[doc(hidden)]
 pub mod __private {
     pub use crate::routing::authorize_route;
+    pub use crate::routing::register_default_controllers_with_options;
     pub use inventory;
 }
 

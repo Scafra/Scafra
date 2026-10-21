@@ -27,6 +27,7 @@ CASES = [
     ("core", "scafra-core", [], OPTIONAL | {"scafra-web", "axum"}),
     ("web", "scafra", ["web"], OPTIONAL),
     ("secure-web", "scafra", ["security"], OPTIONAL - {"scafra-security"}),
+    ("inventory", "scafra", ["security"], OPTIONAL - {"scafra-security"}),
     ("jwt", "scafra", ["jwt"], {"reqwest", "scafra-actuator", "scafra-scheduler", "scafra-bootui"}),
     ("nested", "scafra", ["jwt"], {"reqwest", "scafra-actuator", "scafra-scheduler", "scafra-bootui"}),
     ("jwks", "scafra", ["jwks"], {"scafra-actuator", "scafra-scheduler", "scafra-bootui"}),
@@ -173,6 +174,31 @@ def runtime_nested(project, binary, env, jwt_enabled=None):
     return checks
 
 
+# Linked module is deliberately outside src/main discovery: these adapters must
+# pass through inventory registration in the actual generated main graph.
+INVENTORY = r'''use scafra::prelude::*;
+use scafra::web::{axum::{Router, routing::get}, ControllerRegistration, RouteMetadata};
+fn register(router: Router) -> Router {
+ router.route("/manual", get(|| async { "handwritten inventory" }))
+}
+const MANUAL_ROUTES: &[RouteMetadata] = &[RouteMetadata {
+ controller: "ManualInventory", method: "GET", prefix: "/manual", path: "/"
+}];
+scafra::web::__private::inventory::submit! {
+ ControllerRegistration { controller: "ManualInventory", register, routes: MANUAL_ROUTES }
+}
+#[controller("/linked", authenticated)]
+#[derive(Default)]
+pub struct Linked;
+#[routes(default)]
+impl Linked {
+ #[get("/")] pub async fn root(&self) -> &'static str { "linked inventory" }
+ #[get("/admin")] #[roles("admin")] pub async fn admin(&self) -> &'static str { "admin" }
+ #[get("/open")] #[public] pub async fn open(&self) -> &'static str { "public" }
+}
+'''
+
+
 def request(port, path, token=None):
     headers = {"Authorization": "Bearer " + token} if token else {}
     try:
@@ -196,7 +222,7 @@ def runtime(project, binary, name, env):
     if name in {"minimal", "default", "core", "config", "scheduler"}:
         subprocess.run([str(binary)], cwd=project, env=env, check=True, timeout=10)
         return {"exit_code": 0}
-    secure = name in {"secure-web", "jwt", "jwks", "standard", "all", "bootui"}
+    secure = name in {"secure-web", "inventory", "jwt", "jwks", "standard", "all", "bootui"}
     has_jwt = name in {"jwt", "jwks"}
     actuator = name in {"actuator", "standard", "all"}
     configuration = "startup:\n  banner: false\n"
@@ -248,6 +274,15 @@ def runtime(project, binary, name, env):
                 assert request(port, "/probe/admin", token)[0] == 403
                 assert request(port, "/probe/open")[0] == 200
                 checks.update(anonymous=401, invalid_token=401, missing_role=403, public=200)
+            if name == "inventory":
+                for path in ["/manual", "/linked"]:
+                    assert request(port, path)[0] == 401, path
+                    assert request(port, path, "wrong-token")[0] == 401, path
+                    assert request(port, path, token)[0] == 200, path
+                assert request(port, "/linked/admin", token)[0] == 403
+                assert request(port, "/linked/open")[0] == 200
+                checks["handwritten_inventory"] = {"anonymous": 401, "invalid": 401, "authenticated": 200}
+                checks["macro_default_inventory"] = {"anonymous": 401, "authenticated": 200, "missing_role": 403, "public": 200}
             if has_jwt:
                 assert request(port, "/probe", jwt("wrong-secret"))[0] == 401
                 checks["invalid_signature"] = 401
@@ -346,7 +381,7 @@ def main():
             options += ", default-features = false, features = " + json.dumps(features)
         manifest = (f'[package]\nname = "arch103-{name}"\nversion = "0.0.0"\nedition = "2021"\n'
                     f'[workspace]\n[dependencies]\n{dependency} = {{ {options} }}\n')
-        web = name in {"web", "secure-web", "jwt", "jwks", "actuator", "standard", "all", "bootui"}
+        web = name in {"web", "secure-web", "inventory", "jwt", "jwks", "actuator", "standard", "all", "bootui"}
         if dependency == "scafra-config":
             source = 'fn main() { let _ = scafra_config::ConfigLoader::new().env_prefix("ARCH103_UNUSED").load::<scafra_config::ScafraConfig>().unwrap(); }\n'
         elif dependency == "scafra-core":
@@ -361,7 +396,7 @@ def main():
             manifest += 'serde_json = "1"\n'
             source = '#[scafra::main]\nasync fn main() {}\n'
             (project / "src/main/controllers").mkdir(parents=True)
-            protected = ", authenticated" if name in {"secure-web", "jwt", "jwks", "standard", "all", "bootui"} else ""
+            protected = ", authenticated" if name in {"secure-web", "inventory", "jwt", "jwks", "standard", "all", "bootui"} else ""
             (project / "src/main/controllers/probe.rs").write_text(
                 f'use scafra::prelude::*;\n#[controller("/probe"{protected})]\npub struct Probe;\n'
                 '#[routes]\nimpl Probe { #[get("/")] pub async fn get(&self) -> Json<serde_json::Value> { Json(serde_json::json!({"ok":true})) }\n'
@@ -369,6 +404,9 @@ def main():
                 '#[get("/admin")] #[roles("admin")] pub async fn admin(&self)-> &\'static str { "admin" }\n}\n'
                 if protected else
                 'use scafra::prelude::*;\n#[controller("/probe")]\npub struct Probe;\n#[routes]\nimpl Probe { #[get("/")] pub async fn get(&self) -> Json<serde_json::Value> { Json(serde_json::json!({"ok":true})) } }\n')
+            if name == "inventory":
+                source = "mod linked;\n" + source
+                (project / "src/linked.rs").write_text(INVENTORY)
             (project / "src/main/beans").mkdir()
             (project / "src/main/beans/resource.rs").write_text(RESOURCE)
             if name in {"standard", "all"}:

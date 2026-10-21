@@ -99,25 +99,61 @@ bearer. Signature/algorithm/issuer/audience/cache checks remain implemented by
 the existing verifier. Startup diagnostics are bounded and print safe fixed
 hints even before logging initialization; they do not dump arbitrary payloads.
 
-Policy matching retains inherited declarations and selects the most specific
-path before choosing a method, including explicit HEAD versus implicit GET.
-A public parameter route cannot authorize a static handler.
+Generated controller adapters attach the concrete controller/route policy to
+an Axum `MethodRouter` guard. Axum chooses the actual handler before the guard
+runs. Role/scope enforcement therefore survives `.nest()`, repeated nesting,
+`.merge()`, static/parameter/catch-all selection and implicit GET→HEAD routing.
+Policy identity is never reconstructed from URI prefixes or suffixes. Missing
+context or disabled security cannot make an explicitly protected handler public.
 
-Low-level `ControllerRoutes::register_routes*` adapters only install handlers.
-When composing directly, supply complete, unchanged controller metadata to
-`finish_router_with_options`; arbitrary handwritten Axum routes have no inferred
-controller policy. Scafra's server also finalizes supplied routers against all
-linked controller registrations before bind. This is conservative: an unused
-linked protected controller can reject startup, and already-finalized routers
-receive a second middleware layer (including a separate JWKS cache).
+Two explicit composition boundaries are available:
 
-**Unsupported composition:** applying Axum prefix/path transformations to a
-registered controller router does not transform its static authorization
-metadata. Do not rely on Scafra role/scope declarations after `.nest()` or similar
-rewrites; use generated graph composition with the declared controller prefix.
-Caller-supplied incomplete metadata and arbitrary router transforms cannot be
-validated by inspecting an opaque Axum Router. This is an open limitation for
-broader manual-composition support, recorded in the [review](architecture/arch-01/final-review.md).
+- `finish_router_with_options` and existing raw serving APIs retain global
+  security for arbitrary handwritten Axum routes. Generated guards add their
+  concrete requirements. An outer legacy layer can conservatively deny a
+  nested public override before the guard runs; use the managed API below for
+  the full nested-controller contract.
+- `finish_managed_router(router, metadata, options)` returns `FinalizedRouter`.
+  It installs the shared security context and common HTTP middleware; generated
+  guards enforce their policies. Wrap handwritten Axum routes with
+  `guard_axum_router` **before merging** when they should inherit application
+  security. This explicitly selected API does not infer policies for unrelated
+  handwritten handlers. Omitted startup metadata never removes a generated
+  handler's guard, though complete metadata remains required for diagnostics.
+
+```rust,ignore
+let base = Protected::register_routes(axum::Router::new());
+let nested = axum::Router::new().nest("/v2", base);
+let prepared = scafra::web::finish_managed_router(
+    nested, Protected::route_metadata(), &scafra::router_options(config),
+)?;
+// Return prepared from run_with_finalized_router; no second finalization.
+```
+
+`FinalizedRouter::nest(prefix)` preserves the validated wrapper when nesting
+**after** finalization. `into_router()` exposes a guarded router for direct
+Axum/Tower interoperability; re-entering a legacy raw server API will deliberately
+apply its global boundary again. The facade's `run_with_finalized_router` and
+`run_with_finalized_resources` serve the validated wrapper without repeating
+limits, timeout/tracing or security setup. Generated main uses the latter with
+`Graph::build_finalized_router_with_options_and_resources` and retains resources
+through shutdown. Existing graph/router signatures remain available.
+
+The outermost installed context is authoritative. Inner composed contexts reuse
+its verifier/cache and request-local authenticated principal; role/scope checks
+still run for every guard. Duplicate legacy layers do not cause duplicate JWT
+verification/JWKS fetches, but opaque raw routers cannot advertise installed
+HTTP middleware, so explicitly repeated raw finalization can repeat limits and
+tracing. Prefer the typed finalized path. Tests count one JWKS request across
+repeated contexts/guards. Global `permit_all` uses Axum's `OriginalUri`, so nesting
+cannot grant access by matching only a stripped internal path.
+
+Legacy handwritten inventory adapters in generated graphs are secured at their
+own local boundary before merging. This preserves global security and legacy
+metadata, including macro `routes(default)` public overrides, while sharing the
+outer runtime context. Handwritten adapters receive an isolated router to
+register their own routes; cross-adapter mutation belongs to explicit application
+composition. Operational endpoints also receive an inherited-security guard.
 
 Actuator remains independent of application security. Empty endpoint selection
 adds no endpoints. Its own bearer policy is enforced when selected; global

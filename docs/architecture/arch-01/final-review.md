@@ -1,4 +1,10 @@
-# Independent review of ARCH-01 (#103)
+# Independent review and F7 correction of ARCH-01 (#103)
+
+> **Current local assessment:** F7 and the two additional composition defects
+> discovered during its correction are fixed and verified. See
+> [F7 follow-up](#l-f7-follow-up-current-assessment) for current evidence,
+> composition/migration contract, file inventory and re-evaluated acceptance.
+> Sections A–K retain the earlier review evidence and historical results.
 
 ## A. Executive summary and provenance
 
@@ -7,15 +13,18 @@ composition contract: real optional Cargo edges isolate configuration, core,
 HTTP, security, JWT/JWKS, actuator and scheduling without a new container.
 However, the original completion checklist was too broad. This review reproduced
 three authorization bypasses, a generic configuration regression, and a CI path
-error. Corrections below address those cases except transformed manual controller
-composition, which remains a high-severity merge concern.
+error. At that review, transformed manual controller composition remained a
+high-severity concern; the follow-up below resolves it with route-local guards.
 
 Reviewed commit: `35b267168ec08a8b42fb3053b86dc2f38ce937b5`.
 Branch: `103-arch-01-make-scafra-framework-modules-independently-opt-in-before-100`.
 Working tree was clean at review start. Correct merge base with `origin/main`:
 `e041fc27c46e521e848ecbd3895d85b876c9b831`. `git ls-remote` confirmed those
 exact remote main/branch tips. The implementation is committed and pushed;
-these corrective changes are uncommitted. No branch switch, commit, push, merge,
+those corrections were subsequently committed as `becded3`. The F7 follow-up
+started there; its initial code was externally committed as `f0dff82` while the
+agent was running. Additional corrections documented below remain in the working
+tree. No agent performed a commit or push. No branch switch, commit, push, merge,
 PR, publication, issue closure or original downstream modification occurred.
 
 All 95 changed paths were covered across production/config/facade, independent
@@ -122,7 +131,7 @@ Fresh results below supersede the historical implementation checklist.
   shutdown branch was reviewed, not separately fault-injected. Parent timeout
   does not promise process-group termination of every compiler descendant.
 
-### F7 — High, OPEN: transformed manual controller routers lose role/scope policy
+### F7 — High, corrected in follow-up: transformed manual controller routers lose role/scope policy
 
 - **Location:** `crates/scafra-security/src/middleware.rs`, `authorize_request`
   (`matching_policy` then `policy.unwrap_or_default()`), and
@@ -165,9 +174,9 @@ async fn main() {
   a deterministic fail-closed mechanism. An opaque Router cannot be inspected
   to safely infer arbitrary transformations. Do not add URI-suffix heuristics
   or another global policy registry as a patch.
-- **Status:** not fixed; documented unsupported in public API/migration docs.
-  Documentation does not satisfy the assignment's broader manual-controller
-  enforcement criterion. A focused design/implementation is required before merge.
+- **Historical status:** the earlier review left this open; documentation alone
+  was insufficient. It is now corrected with handler-local guards and explicit
+  finalized serving; the current regressions and limitations are recorded below.
 
 ## C. MSRV decision
 
@@ -395,7 +404,7 @@ settled contract. A 1.0 release also requires explicit MSRV/API policy approval,
 actual hosted CI, and the separate release checklist/RC process (#16/#33/#42/#39).
 No claim of merge, publication or issue completion is made.
 
-## K. Acceptance criteria
+## K. Historical acceptance criteria (superseded)
 
 | #103 criterion | Fresh status | Basis / remaining work |
 | --- | --- | --- |
@@ -468,7 +477,7 @@ Framework source fingerprint remained
 The measured revision is reviewed HEAD plus the uncommitted corrections listed
 above, not an unmodified build of35b2671. No statistical performance claim is made.
 
-## Required continuation before merge
+## Required continuation from the earlier review (completed below)
 
 Resolve F7 with request/route-local authorization identity or another explicitly
 reviewed fail-closed composition contract. Preserve the failing nested-controller
@@ -480,4 +489,242 @@ that fix, then rerun the isolated/process and MSRV matrix and hosted CI.
 This is a security contract correction, not a request to replace typed DI or
 introduce a global registry. Issue#103 is not declared resolved.
 
-**CHANGES REQUIRED BEFORE MERGE**
+**Historical verdict (superseded below):** CHANGES REQUIRED BEFORE MERGE
+
+## L. F7 follow-up: current assessment
+
+### Provenance and root cause
+
+This correction started from clean `becded3f43f4d2b8debd70079b1dcebb792b19cd`
+on the same branch. The current committed HEAD is
+`f0dff826670a345a14e6ba2134500ad79eb4ebe0`, created externally during the task;
+additional changes remain uncommitted. Merge base remains `e041fc27`.
+The agent did not commit, push, change branches, publish, or modify the original
+downstream repository. GitHub issue retrieval was attempted using gh and web;
+authentication/cache access was unavailable. Evaluation uses the supplied issue
+requirements, current source and local architecture documents.
+
+F7 was reproduced again before changing production code:
+`/var/tmp/f7-before-consumer-v4/results.json` records build success and real TCP
+**200 admin data** for a valid shared bearer with no admin role, expected403.
+Actual generated-controller tests also failed for missing roles/scopes.
+Nesting changed the URI while authorization selected policies using original
+static paths; successful authentication plus unmatched/default policy removed
+privilege requirements. Adding a request extension inside a route would not
+fix the old outer middleware ordering: outer authentication runs first and can
+also deny a nested public override before the route runs.
+
+### Selected architecture and alternatives
+
+**Route-local enforcement (A)** is implemented. Each generated MethodRouter has
+a middleware closure carrying its concrete controller and route declarations.
+Axum selects the actual handler, then its guard resolves that exact policy;
+URI matching is not the authority for generated handlers. Roles/scopes cannot
+vanish through nesting, merging, method selection or omitted startup metadata.
+Missing/disabled context denies protected routes; malformed local policies deny.
+
+A shared, opaque SecurityContext supplies validated configuration and the
+existing verifier/JWKS cache. A private request-local principal cache is bound
+to that context's Arc identity. The outermost application context is authoritative;
+inner layers reuse it without dropping their concrete role/scope checks.
+Global permit rules use Axum OriginalUri, rather than a stripped nested URI.
+No mutable global registry, service locator, reflection, new crate or crypto
+implementation was added.
+
+A full second router abstraction (B) is unnecessary. A thin FinalizedRouter
+marks validated composition and gives serving an explicit exactly-once boundary.
+It can nest after finalization; into_router permits direct Axum interoperability.
+The generated main uses the new finalized graph/resource path and existing
+lifecycle ownership. Restrictions/documentation alone (C) were rejected as a fix
+for generated handler protection. Legacy raw/global APIs remain available and
+fail closed, but an outer legacy layer may conservatively deny nested public
+routes; use managed finalization for that positive public-override contract.
+No prefix/suffix guessing is used.
+
+### API and composition contract
+
+- `finish_managed_router(router, metadata, options)` returns FinalizedRouter.
+  Generated guards own enforcement; metadata remains for startup validation.
+  Complete declared metadata is required for diagnostics. Existing declared-path
+  collision validation can conservatively reject metadata conflicts even after
+  mounts; it never silently discards required policy.
+- `guard_axum_router(raw)` explicitly applies inherited application security to
+  handwritten routes **before merging** into managed composition. The new managed
+  API does not silently infer policy for unrelated handwritten routes. An explicit
+  guard without an installed context fails closed when security is compiled.
+- `run_with_finalized_router`, `run_with_finalized_resources`, and
+  `serve_finalized_router_with_callbacks` consume the validated wrapper without
+  reinstalling limits, tracing, timeout or security. Graph exposes
+  `build_finalized_router_with_options_and_resources`; generated main uses it.
+- Existing raw/global APIs retain their signatures and globally enforce arbitrary
+  raw routes, plus generated local guards. Re-finalizing an opaque raw Router can
+  repeat HTTP middleware; it cannot advertise its previous finalization safely.
+  Cached principals and the effective context avoid repeated authentication and
+  independent active JWKS caches. The network regression counts one JWKS fetch
+  across repeated legacy/context/local layers and subsequent requests.
+- Handwritten inventory adapters in the managed graph are registered on isolated
+  empty routers, locally secured with their metadata/global policy, then merged.
+  This preserves their old authentication and `routes(default)` public overrides.
+  Cross-adapter mutation must use explicit legacy/application composition; this
+  compatibility consequence is documented. Operational routes get an inherited
+  guard before controller composition.
+- Generated policy guards survive raw nesting before/after finalization, repeated
+  nesting, merges and path rewrites without policy reconstruction. Standard
+  MethodRouter guards and Axum's exact routing determine GET/HEAD specificity.
+  User code that directly invokes business methods or deliberately replaces guards
+  is outside framework-managed HTTP enforcement.
+
+### Additional confirmed findings fixed during independent review
+
+1. **High — nested global allowlist bypass.** An inherited `/implicit/public`
+   controller nested under `/admin` matched permit_all against its stripped URI,
+   returning200 anonymously although `/admin/implicit/public` was excluded.
+   Before evidence: `/var/tmp/f7-permit-before-live/results.json` and a failing
+   generated-controller test. `enforce` now uses OriginalUri for the application
+   allowlist. After evidence: `/var/tmp/f7-permit-after-live/results.json`,401.
+2. **High — inventory adapter protection regression.** The first managed graph
+   guarded operational routes, then registered handwritten adapters without a
+   local guard. Actual generated main served anonymous `/probe` with200 despite
+   globally enabled security. The compatibility bridge above fixes this.
+   Original fixture `/var/tmp/f7-inventory-before` now returns401 missing/invalid,
+   200 valid, SIGTERM0; persistent inventory consumer also covers macro default
+   public overrides and missing-role403.
+3. **Medium — explicit guard without context.** The inherited guard could allow
+   direct serving without context. It now returns401; focused regression passes.
+4. A stale macro expansion assertion expected the old runner name. It was updated
+   to assert the new finalized runner, preserving bounded-startup-log checks.
+   A no-security unused-options Clippy failure after splitting the security helper
+   was fixed with a cfg-specific unused binding. Earlier failures remain in logs.
+
+### Fresh verification of the correction
+
+All seven requested workspace commands were executed; final results are in
+`/var/tmp/f7-verified-workspace/final-results.json`:
+
+| Exact command | Result |
+| --- | --- |
+| `cargo fmt --all -- --check` | PASS |
+| `cargo check --workspace` | PASS |
+| `cargo test --workspace` | PASS |
+| `cargo clippy --workspace --all-targets -- -D warnings` | PASS on corrected rerun |
+| `cargo check --workspace --all-features` | PASS |
+| `cargo test --workspace --all-features` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+
+New focused checks were also run after the broader checks where tests were added:
+
+| Command / actual process check | Result |
+| --- | --- |
+| `cargo +1.88.0 check --workspace --all-features --all-targets` | PASS, actual root; `/var/tmp/scafra-msrv188-inventory-check.log` |
+| `cargo +1.88.0 test --workspace --all-features -- --test-threads=1` | PASS,387 tests,2 intentional ignored; `/var/tmp/scafra-msrv188-inventory-tests.log` |
+| `cargo test -p scafra --features jwt --test nested_authorization` | PASS,7 actual-macro tests; all-feature selection also passes |
+| `cargo test -p scafra-security --no-default-features --test route_local` | PASS,8 tests |
+| Same security test with `--all-features` | PASS,10 tests including explicit HEAD and counted real JWKS |
+| `cargo test -p scafra-web --no-default-features --test optional_security` | PASS,6 tests including omitted-context/feature local guard denial |
+| Same web test with `--all-features` | PASS,7 tests |
+| `cargo test -p scafra --features standard --test properties_environment` | PASS,22 #78 regressions |
+| `python3 scripts/arch103-consumers.py /var/tmp/f7-consumers-final-v2 --runtime --target-dir /var/tmp/arch103-review-target` | PASS,15 isolated runtime cases, all absence assertions |
+| `python3 scripts/arch103-negative.py --output /var/tmp/f7-negative-final-v2 --target-dir /var/tmp/scafra-arch103-negative-target` | PASS,9 cases including feature-union masks, protected no-security, owner compile failures |
+| `python3 scripts/arch103-package-check.py --offline --reuse /var/tmp/scafra-arch103-packages-20261021` | PASS,12 extracted packages and registry-source web/standard macro consumers |
+| `python3 scripts/arch103-publish-order.py` | PASS, both dependency orders |
+| `cargo test -p scafra-cli --test generated_projects generated_projects_serve_routes_and_shutdown_gracefully -- --ignored --nocapture` | PASS,4 actual generated kinds over TCP and bounded SIGTERM |
+| `cargo test --offline --manifest-path examples/async-resource/Cargo.toml` | PASS,6 generated resource lifecycle tests |
+| Temporary migrated downstream `cargo test --manifest-path /var/tmp/scafra-103-downstream-modular/Cargo.toml --offline` | PASS; original downstream untouched |
+
+The nested external case tests both pre/post-finalization compositions and two
+runtime configurations (static bearer and JWT): anonymous/invalid401, valid
+bearer without admin403, JWT missing role403, admin JWT200, missing scope403,
+combined roles+scope200, explicit public200 and bounded SIGTERM exit0. It also
+checks OriginalUri allowlist denial. Enabling JWT intentionally validates all
+Bearer credentials as JWT; no static-bearer fallback was added.
+The inventory case uses the actual generated entrypoint, handwritten registrations,
+`routes(default)` and resource shutdown events. The facade tests cover two
+controllers, static/parameter/catch-all/slash paths, repeated nesting, scopes,
+public overrides and missing finalization. Per-method guard tests cover explicit
+HEAD/public GET and the reverse in both nesting orders. F2/F3/F4 remain covered
+by the existing security, optional-security and negative suites.
+
+Fresh local checks do not assert hosted CI passed. CI now includes nested and
+inventory cases on Rust1.88. Actual publication/index propagation, human review,
+release-version coordination and the1.0 RC checklist remain separate release steps.
+
+### Dependencies and overhead
+
+No Cargo dependencies, default features, lockfile versions or MSRV changed.
+Fresh consumer counts below the facade remain minimal40/web78/standard136;
+external consumer counts include the facade and are41/79/137. All forbidden
+normal-dependency sets are empty, including no JWT/JWKS in web-only or inventory.
+Normal counts include macro-host normal edges, not build/dev edges.
+The change adds route-local policy checks and an Arc-shared request principal
+on authenticated paths. It removes repeated finalization from generated main;
+legacy opaque re-finalization may repeat HTTP layers, explicitly documented.
+One effective JWKS cache/fetch is measured in the layering regression. No new
+controlled latency/build-time benchmark was performed for this follow-up, and
+no unmeasured speed claim is made. Earlier binary/timing observations above
+remain historical, not measurements of the new guard code.
+
+### Current issue #103 acceptance
+
+These statuses are based on the executions above, not copied from the prior
+checklist. PASS means the implemented local contract is verified; hosted CI and
+release operations remain explicitly outstanding.
+
+| Criterion | Current status | Evidence |
+| --- | --- | --- |
+| Generic config independent of optional runtimes | PASS | isolated config/minimal and config/property tests |
+| HTTP without security/actuator/scheduler | PASS | web-only closure78 and real TCP |
+| Optional JWT/JWKS | PASS | separate security/JWT/JWKS closures and verifier negatives |
+| Optional actuator | PASS | absence checks and operational authentication/readiness tests |
+| Optional scheduler | PASS | HTTP-free scheduler execution/drain and absence checks |
+| HTTP-free core lifecycle | PASS | core/minimal consumers and lifecycle tests |
+| Facade features implemented | PASS | empty defaults and15 isolated selections/behaviors |
+| Macro compatibility | PASS | actual generated main/graph and compile-pass/fail fixtures |
+| Generated applications select only needed modules | PASS | independent CLI projects and forbidden-package assertions |
+| Protected routes fail closed | PASS | F7/OriginalUri/inventory before/after evidence; guards without context deny |
+| Invalid security configuration rejected | PASS | nine negative cases and feature-unification checks |
+| Async ownership/rollback/shutdown | PASS | generated resources, example6, live events and scheduler/HTTP drain |
+| CLI templates updated | PASS | full workspace CLI tests and4-kind real TCP/SIGTERM |
+| External consumers | PASS |15 passed, including persistent nested/inventory regressions |
+| Real startup/shutdown | PASS | loopback requests, bounded SIGTERM/exit0 and cleanup |
+| Dependency isolation | PASS |40/78/136, absent optional packages independently checked |
+| CI feature matrix | PASS locally | workflow includes nested/inventory; equivalent commands pass; hosted run not asserted |
+| MSRV and target | PASS | Rust1.88 actual-root tests/check, Linux x86_64; no other-target claim |
+| Package/publish order | PASS locally |12 package builds,2 version-only consumers and DAG; no publication |
+| API migration documented | PASS | explicit managed/raw contract, finalized resources and adapter isolation |
+| Measurements recorded | PASS | dependency counts freshly reproduced; performance history retained with limits |
+| Documentation updated | PASS | ADR, modules, security, matrix, compatibility and current review |
+| Relevant tests | PASS | seven workspace checks plus focused/process/package/MSRV checks |
+
+### Files changed in this follow-up
+
+This inventory covers both the externally committed initial correction and its
+remaining working-tree improvements, relative to the starting `becded3`:
+
+- `.github/workflows/ci.yml`
+- `crates/scafra-build/src/renderer.rs`
+- `crates/scafra-macros/src/lib.rs`
+- `crates/scafra-macros/src/main.rs`
+- `crates/scafra-macros/src/routes.rs`
+- `crates/scafra-security/src/lib.rs`
+- `crates/scafra-security/src/middleware.rs`
+- `crates/scafra-security/src/policy.rs`
+- `crates/scafra-security/tests/route_local.rs`
+- `crates/scafra-web/src/lib.rs`
+- `crates/scafra-web/src/registration.rs`
+- `crates/scafra-web/src/routing.rs`
+- `crates/scafra-web/src/server.rs`
+- `crates/scafra-web/tests/optional_security.rs`
+- `crates/scafra/src/lib.rs`
+- `crates/scafra/src/startup.rs`
+- `crates/scafra/tests/nested_authorization.rs`
+- `docs/architecture/arch-01/adr-001-modular-framework.md`
+- `docs/architecture/arch-01/compatibility-security.md`
+- `docs/architecture/arch-01/feature-matrix.md`
+- `docs/architecture/arch-01/implementation.md`
+- `docs/modules.md`
+- `docs/security.md`
+- `scripts/arch103-consumers.py`
+
+- `docs/architecture/arch-01/final-review.md`
+
+**READY FOR PR REVIEW**

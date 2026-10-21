@@ -299,3 +299,80 @@ async fn explicit_handwritten_guard_requires_an_installed_context() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn explicit_head_and_get_keep_independent_local_policies() {
+    use axum::http::Method;
+    use axum::routing::head;
+    let public = RouteAuthorizationMetadata {
+        route_policy: AuthorizationPolicy::public(),
+        ..ADMIN
+    };
+    for public_get in [true, false] {
+        let get_policy = if public_get { public } else { ADMIN };
+        let head_policy = if public_get { ADMIN } else { public };
+        let methods =
+            get(|| async { "get" })
+                .layer(middleware::from_fn(move |request, next| {
+                    authorize_route(request, next, get_policy)
+                }))
+                .merge(head(|| async { "head" }).layer(middleware::from_fn(
+                    move |request, next| authorize_route(request, next, head_policy),
+                )));
+        // Both composition orders must preserve the selected method guard.
+        let local = Router::new().route("/methods", methods);
+        let nested_before =
+            context_layer(Router::new().nest("/v2", local.clone()), bearer("valid"));
+        let nested_after = Router::new().nest("/v2", context_layer(local, bearer("valid")));
+        for app in [nested_before, nested_after] {
+            for (method, expected) in [
+                (
+                    Method::GET,
+                    if public_get {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::UNAUTHORIZED
+                    },
+                ),
+                (
+                    Method::HEAD,
+                    if public_get {
+                        StatusCode::UNAUTHORIZED
+                    } else {
+                        StatusCode::OK
+                    },
+                ),
+            ] {
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri("/v2/methods")
+                            .method(method)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), expected);
+            }
+            let protected_method = if public_get {
+                Method::HEAD
+            } else {
+                Method::GET
+            };
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/v2/methods")
+                        .method(protected_method)
+                        .header("authorization", "Bearer valid")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+    }
+}

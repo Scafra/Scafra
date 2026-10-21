@@ -8,6 +8,17 @@ Independent corrective review is recorded in [final review](final-review.md). Th
 contract and migration are in [modules](../../modules.md), with actual tests and
 measurements in [implementation results](implementation.md).
 
+## F7 security correction
+
+Route-local guards now bind concrete policies to generated MethodRouter handlers.
+A shared outermost security context supplies authentication/cache state. Managed
+finalization returns a validated wrapper served without re-finalization; raw
+legacy APIs retain global handwritten-route protection. No URI-prefix/suffix
+heuristics or new registry is introduced. Explicit managed composition requires
+handwritten routes to opt into `guard_axum_router`. Inventory compatibility
+adapters retain a local legacy boundary. See the current [review](final-review.md)
+and [composition contract](../../modules.md).
+
 ## Final implementation decisions and deviations
 
 - Retain one workspace and existing crates, empty facade/config/security/web

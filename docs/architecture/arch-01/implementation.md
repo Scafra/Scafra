@@ -10,6 +10,14 @@ MSRV justification and readiness. [Modules](../../modules.md) is the current
 public feature/migration reference; the audits/baseline remain historical evidence.
 No merge, release or issue closure is asserted.
 
+## Route-local security follow-up
+
+The subsequent F7 correction attaches authorization to actual generated handlers,
+adds explicit managed/finalized composition, shares verifier context across
+layers, and preserves handwritten inventory enforcement. Current verification
+and acceptance are in [final review](final-review.md), superseding the historical
+completion and before/after observations below.
+
 ## Final architecture
 
 The repository remains a single Cargo workspace with twelve packages. The

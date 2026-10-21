@@ -21,10 +21,12 @@ inventory::collect!(ControllerRegistration);
 
 /// Implemented by generated controller route adapters.
 ///
-/// These low-level methods install handlers, not authorization middleware.
-/// Finalize with `finish_router_with_options` and complete `route_metadata()`.
-/// Static metadata assumes the declared prefix; Axum nesting/path rewrites do
-/// not update it. Generated graph composition preserves this contract.
+/// Generated adapters install route-local authorization guards with their
+/// handlers. Roles/scopes remain attached through Axum nesting and merging.
+/// Protected handlers deny requests if no enabled security context is installed.
+/// Use `finish_managed_router` for explicit managed composition, and its typed
+/// finalized serving boundary to preserve nested public overrides. Handwritten
+/// implementations must provide their own guard or use legacy global security.
 pub trait ControllerRoutes: Send + Sync + 'static {
     fn register_routes(router: Router) -> Router
     where
