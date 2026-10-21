@@ -1,3 +1,5 @@
+#![cfg(feature = "jwt")]
+
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},

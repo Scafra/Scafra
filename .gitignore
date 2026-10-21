@@ -6,3 +6,4 @@ Cargo.lock
 .agent/locks/
 .agent
 .idea
+/scripts/__pycache__/

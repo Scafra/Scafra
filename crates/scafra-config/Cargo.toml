@@ -7,11 +7,21 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Typed configuration primitives for Scafra applications"
 
+[features]
+default = []
+security = ["dep:scafra-security"]
+jwt = ["security", "scafra-security/jwt"]
+jwks = ["jwt", "scafra-security/jwks"]
+actuator = ["dep:scafra-actuator"]
+scheduler = ["dep:scafra-scheduler"]
+bootui = []
+standard = ["security", "jwt", "jwks", "actuator", "scheduler"]
+
 [dependencies]
 scafra-foundation.workspace = true
-scafra-actuator.workspace = true
-scafra-scheduler.workspace = true
-scafra-security.workspace = true
+scafra-actuator = { workspace = true, optional = true }
+scafra-scheduler = { workspace = true, optional = true }
+scafra-security = { workspace = true, optional = true }
 serde.workspace = true
 serde_yaml.workspace = true
 thiserror.workspace = true

@@ -9,15 +9,19 @@ use std::{
 use anyhow::{Context, Result};
 
 use crate::{
-    cli::ApplicationKind,
+    cli::{ApplicationKind, Capability},
     filesystem::{ensure_destination_available, package_name},
     templates::{template_files, STANDARD_DIRECTORIES},
 };
 
-pub(crate) fn create_project(path: &Path, kind: ApplicationKind) -> Result<()> {
+pub(crate) fn create_project(
+    path: &Path,
+    kind: ApplicationKind,
+    features: &[Capability],
+) -> Result<()> {
     ensure_destination_available(path)?;
     let package_name = package_name(path)?;
-    let files = template_files(path, &package_name, kind)?;
+    let files = template_files(path, &package_name, kind, features)?;
     let staging = StagingDirectory(Some(create_staging_directory(path)?));
 
     populate_project(staging.path(), &files)?;

@@ -10,18 +10,30 @@ description = "Batteries-included web application framework for Rust"
 [lib]
 name = "scafra"
 
+[features]
+default = []
+web = ["dep:scafra-web", "dep:tokio", "dep:axum"]
+security = ["web", "dep:scafra-security", "scafra-config/security", "scafra-web/security"]
+jwt = ["security", "scafra-security/jwt", "scafra-config/jwt", "scafra-web/jwt"]
+jwks = ["jwt", "scafra-security/jwks", "scafra-config/jwks", "scafra-web/jwks"]
+actuator = ["web", "dep:scafra-actuator", "scafra-config/actuator", "scafra-web/actuator"]
+scheduler = ["dep:scafra-scheduler", "scafra-config/scheduler", "dep:tokio"]
+bootui = ["security", "dep:scafra-bootui", "scafra-config/bootui"]
+standard = ["web", "security", "jwt", "jwks", "actuator", "scheduler"]
+
 [dependencies]
-axum.workspace = true
-scafra-config.workspace = true
+axum = { workspace = true, optional = true }
+scafra-config = { workspace = true, default-features = false }
 scafra-core.workspace = true
 scafra-foundation.workspace = true
 scafra-macros.workspace = true
-scafra-actuator.workspace = true
-scafra-scheduler.workspace = true
-scafra-security.workspace = true
-scafra-web.workspace = true
+scafra-actuator = { workspace = true, optional = true }
+scafra-scheduler = { workspace = true, optional = true }
+scafra-security = { workspace = true, optional = true }
+scafra-web = { workspace = true, optional = true, default-features = false }
+scafra-bootui = { workspace = true, optional = true }
 inventory.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, optional = true }
 tracing.workspace = true
 thiserror.workspace = true
 
@@ -33,3 +45,55 @@ serde_json.workspace = true
 tower.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber.workspace = true
+
+[[test]]
+name = "actuator_startup"
+required-features = ["standard"]
+
+[[test]]
+name = "config"
+required-features = ["standard"]
+
+[[test]]
+name = "config_resolution"
+required-features = ["standard"]
+
+[[test]]
+name = "container"
+required-features = ["standard"]
+
+[[test]]
+name = "duplicate_routes"
+required-features = ["standard"]
+
+[[test]]
+name = "foundation_api"
+required-features = ["standard"]
+
+[[test]]
+name = "health_registry_api"
+required-features = ["standard"]
+
+[[test]]
+name = "json_body"
+required-features = ["standard"]
+
+[[test]]
+name = "logging"
+required-features = ["standard"]
+
+[[test]]
+name = "properties_environment"
+required-features = ["standard"]
+
+[[test]]
+name = "scheduler_lifecycle"
+required-features = ["standard"]
+
+[[test]]
+name = "security"
+required-features = ["standard"]
+
+[[test]]
+name = "vertical_slice"
+required-features = ["standard"]

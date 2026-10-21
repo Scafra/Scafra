@@ -74,6 +74,7 @@ fn invalid_authentication_configurations_return_safe_validation_errors() {
             },
             "basic credentials must not be empty",
         ),
+        #[cfg(feature = "jwt")]
         (
             SecurityConfig {
                 jwt: JwtConfig {
@@ -84,6 +85,7 @@ fn invalid_authentication_configurations_return_safe_validation_errors() {
             },
             "JWT requires secret, issuer_uri, or jwk_set_uri",
         ),
+        #[cfg(feature = "jwt")]
         (
             SecurityConfig {
                 jwt: JwtConfig {
@@ -103,6 +105,7 @@ fn invalid_authentication_configurations_return_safe_validation_errors() {
 }
 
 #[test]
+#[cfg(feature = "jwks")]
 fn jwt_provider_configuration_is_validated_without_echoing_urls() {
     let cases = [
         (
@@ -221,6 +224,7 @@ fn application_bearer_validation_preserves_valid_token_exactly() {
     assert_eq!(config.validate(), Ok(()));
     assert_eq!(config.bearer_token.as_deref(), Some("valid-token-sentinel"));
 
+    #[cfg(feature = "jwt")]
     let jwt_alternative = SecurityConfig {
         enabled: true,
         jwt: JwtConfig {
@@ -230,6 +234,7 @@ fn application_bearer_validation_preserves_valid_token_exactly() {
         },
         ..SecurityConfig::default()
     };
+    #[cfg(feature = "jwt")]
     assert_eq!(jwt_alternative.validate(), Ok(()));
 }
 

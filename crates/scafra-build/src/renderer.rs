@@ -73,20 +73,27 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
     render_resource_set_impl(model, &resource_indices, output);
 
     output.push_str("    impl Graph {\n");
+    output.push_str("        ::scafra::__scafra_if_integrations! {\n");
     if resource_indices.is_empty() {
-        output.push_str("        /// Builds the graph router.\n        pub fn build_router(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> {\n            let (result, _resources) = self.build_router_and_resources(actuator, security, request_timeout);\n            result\n        }\n\n");
+        output.push_str("        pub fn build_router(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> { let (result, _) = self.build_router_and_resources(actuator, security, request_timeout); result }\n");
+        output.push_str("        pub fn build_router_with_health_registry(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, health_registry: ::scafra::HealthRegistry, request_timeout: Option<::std::time::Duration>) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> { let (result, _) = self.build_router_with_health_registry_and_resources(actuator, security, health_registry, request_timeout); result }\n");
     }
-    output.push_str("        /// Builds the graph router and returns its application-owned async resources.\n        /// Unknown configured health-check names are returned as startup errors.\n        pub fn build_router_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) {\n            match ::scafra::actuator::try_router(actuator) {\n                Ok(router) => self.build_router_with_actuator_router_and_resources(router, actuator, security, request_timeout),\n                Err(error) => { let resources = self.into_resources(); (Err(::scafra::web::WebError::from(error)), resources) }\n            }\n        }\n\n");
-    if resource_indices.is_empty() {
-        output.push_str("        /// Builds the graph router with checks owned by this application's registry.\n        pub fn build_router_with_health_registry(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, health_registry: ::scafra::HealthRegistry, request_timeout: Option<::std::time::Duration>) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> {\n            let (result, _resources) = self.build_router_with_health_registry_and_resources(actuator, security, health_registry, request_timeout);\n            result\n        }\n\n");
-    }
-    output.push_str("        /// Builds the router and returns resources retained by this graph.\n        pub fn build_router_with_health_registry_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, health_registry: ::scafra::HealthRegistry, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) {\n            match ::scafra::actuator::router_with_health_registry(actuator, health_registry) {\n                Ok(router) => self.build_router_with_actuator_router_and_resources(router, actuator, security, request_timeout),\n                Err(error) => { let resources = self.into_resources(); (Err(::scafra::web::WebError::from(error)), resources) }\n            }\n        }\n\n        fn into_resources(self) -> Resources {\n            Resources {\n");
+    output.push_str("        pub fn build_router_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { self.build_router_with_options_and_resources(&::scafra::web::RouterOptions { actuator: actuator.clone(), security: security.clone(), request_timeout }) }\n");
+    output.push_str("        pub fn build_router_with_health_registry_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, health_registry: ::scafra::HealthRegistry, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { let options = ::scafra::web::RouterOptions { actuator: actuator.clone(), security: security.clone(), request_timeout }; match ::scafra::actuator::router_with_health_registry(actuator, health_registry) { Ok(router) => self.build_router_with_options_router_and_resources(router, &options), Err(error) => { let resources = self.into_resources(); (Err(error.into()), resources) } } }\n        }\n");
+    output.push_str("        pub fn into_resources(self) -> Resources { Resources {\n");
     for index in &resource_indices {
         output.push_str(&format!(
             "                resource_{index}: self.managed_{index},\n"
         ));
     }
-    output.push_str("            }\n        }\n\n        fn build_router_with_actuator_router_and_resources(self, mut router: ::scafra::web::axum::Router, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) {\n            let Self {");
+    output.push_str("            } }\n        ::scafra::__scafra_if_web! {\n");
+    if resource_indices.is_empty() {
+        output.push_str("        pub fn build_router_with_options(self, options: &::scafra::web::RouterOptions) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> { let (result, _) = self.build_router_with_options_and_resources(options); result }\n");
+    }
+    output.push_str("        pub fn build_router_with_options_and_resources(self, options: &::scafra::web::RouterOptions) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { match ::scafra::web::operational_router(options) { Ok(router) => self.build_router_with_options_router_and_resources(router, options), Err(error) => { let resources = self.into_resources(); (Err(error), resources) } } }\n");
+    output.push_str("        pub fn build_finalized_router_with_options_and_resources(self, options: &::scafra::web::RouterOptions) -> (Result<::scafra::web::FinalizedRouter, ::scafra::web::WebError>, Resources) { match ::scafra::web::operational_router(options) { Ok(router) => self.build_router_with_finalizer_and_resources(::scafra::web::guard_axum_router(router), options, ::scafra::web::finish_managed_router, true), Err(error) => { let resources = self.into_resources(); (Err(error), resources) } } }\n");
+    output.push_str("        fn build_router_with_options_router_and_resources(self, router: ::scafra::web::axum::Router, options: &::scafra::web::RouterOptions) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { self.build_router_with_finalizer_and_resources(router, options, ::scafra::web::finish_router_with_options, false) }\n");
+    output.push_str("        fn build_router_with_finalizer_and_resources<T, F>(self, mut router: ::scafra::web::axum::Router, options: &::scafra::web::RouterOptions, finalize: F, managed_defaults: bool) -> (Result<T, ::scafra::web::WebError>, Resources) where F: FnOnce(::scafra::web::axum::Router, &[::scafra::web::RouteMetadata], &::scafra::web::RouterOptions) -> Result<T, ::scafra::web::WebError> {\n            let Self {");
     for (index, node) in model.nodes.iter().enumerate() {
         let has_consumers = model
             .edges
@@ -106,7 +113,7 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
             "                resource_{index}: managed_{index},\n"
         ));
     }
-    output.push_str("            };\n            let route_result = (|| -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> {\n            let mut routes = ::scafra::web::default_controller_metadata(&[");
+    output.push_str("            };\n            let route_result = (|| -> Result<T, ::scafra::web::WebError> {\n            let mut routes = ::scafra::web::default_controller_metadata(&[");
     for node in &model.nodes {
         if node.kind == GraphNodeKind::Controller
             && !model
@@ -131,7 +138,7 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
             ));
         }
     }
-    output.push_str("            ::scafra::web::validate_routes(&routes, actuator)?;\n            router = ::scafra::web::register_default_controllers(router, &[");
+    output.push_str("            ::scafra::web::validate_routes_with_options(&routes, options)?;\n            let composed_controllers = &[");
     for node in &model.nodes {
         if node.kind == GraphNodeKind::Controller
             && !model
@@ -142,7 +149,7 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
             output.push_str(&format!("{} ,", rust_string(&node.output)));
         }
     }
-    output.push_str("]);\n");
+    output.push_str("];\n            router = if managed_defaults { ::scafra::web::__private::register_default_controllers_with_options(router, composed_controllers, options)? } else { ::scafra::web::register_default_controllers(router, composed_controllers) };\n");
     for (index, node) in model.nodes.iter().enumerate() {
         if node.kind == GraphNodeKind::Controller
             && !model
@@ -156,7 +163,7 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
             ));
         }
     }
-    output.push_str("            ::scafra::web::finish_router(router, &routes, actuator, security, request_timeout)\n            })();\n            (route_result, resources)\n        }\n    }\n\n");
+    output.push_str("            finalize(router, &routes, options)\n            })();\n            (route_result, resources)\n        }\n        }\n    }\n\n");
     output.push_str("    #[derive(Default)]\n    pub struct Overrides {\n");
     for (index, node) in model.nodes.iter().enumerate() {
         output.push_str(&format!(

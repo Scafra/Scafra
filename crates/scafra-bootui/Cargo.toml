@@ -9,7 +9,7 @@ description = "Optional local Scafra operations dashboard"
 
 [dependencies]
 axum.workspace = true
-scafra-config.workspace = true
+scafra-config = { workspace = true, features = ["bootui", "security"] }
 scafra-core.workspace = true
 scafra-security.workspace = true
 inventory.workspace = true
@@ -18,6 +18,7 @@ tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+scafra-config = { workspace = true, features = ["actuator", "jwt"] }
 serde_json.workspace = true
 serde_yaml.workspace = true
 tower.workspace = true

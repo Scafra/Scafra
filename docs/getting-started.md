@@ -1,8 +1,15 @@
 # Getting started
 
+## Capability selection
+
+Starters explicitly select `web` and disable Cargo defaults. To add capabilities
+use `scafra new my-api --kind api --features security,actuator`. Security config
+requires application-supplied credentials. See [module reference](modules.md).
+
+
 ## Requirements
 
-- Rust 1.99.1 or newer (use the latest stable release)
+- Rust 1.88 or newer (use the latest stable release)
 - Cargo
 
 The CLI is currently run from this workspace.

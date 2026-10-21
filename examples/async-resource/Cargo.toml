@@ -7,7 +7,7 @@ publish = false
 [workspace]
 
 [dependencies]
-scafra = { path = "../../crates/scafra" }
+scafra = { path = "../../crates/scafra", features = ["standard"] }
 sqlx = { version = "=0.8.6", default-features = false, features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 

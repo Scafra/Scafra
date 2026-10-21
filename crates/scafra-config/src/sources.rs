@@ -21,6 +21,8 @@ const SCAFRA_ENV_CONTROLS: [&str; 5] = [
     "DEV_CHILD",
     "DEV_RELOAD",
 ];
+/// Deserializes a domain YAML document without reserving framework namespaces.
+/// For framework startup use `ConfigLoader::load_validated::<ScafraConfig>()`.
 pub fn load_yaml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, ConfigError> {
     let path = path.as_ref();
     let display_path = path.display().to_string();
@@ -37,6 +39,11 @@ pub fn load_yaml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, Confi
 /// A typed configuration value can provide its own validation before startup.
 pub trait Config: Sized {
     type Error: std::error::Error + Send + Sync + 'static;
+
+    /// Selects Scafra namespace/capability checks for framework-owned settings.
+    /// Domain configuration retains its own schema, including `security` and
+    /// `server` fields. The standard application configuration opts in.
+    const FRAMEWORK_CONFIGURATION: bool = false;
 
     fn validate(&self) -> Result<(), Self::Error>;
 
@@ -90,6 +97,53 @@ impl<T> Properties<T> {
     }
 }
 
+/// Optional capabilities available to one application configuration consumer.
+///
+/// Cargo features are unified across dependencies. A facade or runner can
+/// narrow this mask to its own compiled capabilities even when another direct
+/// dependency enables more configuration models. A mask cannot enable code
+/// that was not compiled into `scafra-config`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfigCapabilities {
+    pub security: bool,
+    pub jwt: bool,
+    pub jwks: bool,
+    pub actuator: bool,
+    pub scheduler: bool,
+    pub bootui: bool,
+}
+
+// With no features these values happen to be all false, but other feature
+// selections require a non-derived implementation.
+#[allow(clippy::derivable_impls)]
+impl Default for ConfigCapabilities {
+    fn default() -> Self {
+        Self {
+            security: cfg!(feature = "security"),
+            jwt: cfg!(feature = "jwt"),
+            jwks: cfg!(feature = "jwks"),
+            actuator: cfg!(feature = "actuator"),
+            scheduler: cfg!(feature = "scheduler"),
+            bootui: cfg!(feature = "bootui"),
+        }
+    }
+}
+
+impl ConfigCapabilities {
+    fn intersect(self, other: Self) -> Self {
+        let security = self.security && other.security;
+        let jwt = security && self.jwt && other.jwt;
+        Self {
+            security,
+            jwt,
+            jwks: jwt && self.jwks && other.jwks,
+            actuator: self.actuator && other.actuator,
+            scheduler: self.scheduler && other.scheduler,
+            bootui: self.bootui && other.bootui,
+        }
+    }
+}
+
 /// Loader implementing Scafra's configuration precedence chain:
 /// defaults, base YAML/YML/properties files, profile YAML/YML/properties
 /// files, sorted environment values, then explicit overrides. Missing files
@@ -101,6 +155,8 @@ pub struct ConfigLoader {
     profile: Option<String>,
     env_prefix: String,
     overrides: BTreeMap<String, String>,
+    capabilities: ConfigCapabilities,
+    framework_configuration: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +182,8 @@ impl Default for ConfigLoader {
             profile: None,
             env_prefix: "SCAFRA".to_owned(),
             overrides: BTreeMap::new(),
+            capabilities: ConfigCapabilities::default(),
+            framework_configuration: false,
         }
     }
 }
@@ -133,6 +191,26 @@ impl Default for ConfigLoader {
 impl ConfigLoader {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Enables strict validation of Scafra-owned namespaces in every selected
+    /// input before merging. Use this for application configuration; generic
+    /// domain settings do not reserve any Scafra field names.
+    pub fn framework(mut self) -> Self {
+        self.framework_configuration = true;
+        self
+    }
+
+    /// Narrows the optional capabilities accepted by this loader.
+    /// Also selects framework namespace validation.
+    ///
+    /// This is independent of Cargo feature unification and can never enable
+    /// a capability unavailable in the compiled configuration crate. Repeated
+    /// calls only narrow the existing mask.
+    pub fn capabilities(mut self, capabilities: ConfigCapabilities) -> Self {
+        self.framework_configuration = true;
+        self.capabilities = self.capabilities.intersect(capabilities);
+        self
     }
 
     /// Selects an application root. For compatibility, `src/resources/` is
@@ -184,6 +262,8 @@ impl ConfigLoader {
             .unwrap_or_else(|| "default".to_owned()))
     }
 
+    /// Loads a domain value using its typed schema. Select `.framework()` for
+    /// strict framework namespaces, or use validated `ScafraConfig` loading.
     pub fn load<T>(&self) -> Result<T, ConfigError>
     where
         T: DeserializeOwned + Serialize + Default,
@@ -208,7 +288,9 @@ impl ConfigLoader {
         T: ConfigProperties + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let (merged, origins, _) = self.load_merged::<T>(T::CONFIG_PREFIX)?;
+        let mut loader = self.clone();
+        loader.framework_configuration |= T::FRAMEWORK_CONFIGURATION;
+        let (merged, origins, _) = loader.load_merged::<T>(T::CONFIG_PREFIX)?;
         let value = if T::CONFIG_PREFIX.is_empty() {
             merged
         } else {
@@ -268,6 +350,9 @@ impl ConfigLoader {
 
         self.merge_environment(&mut merged, &schema, &mut origins)?;
         for (path, value) in &self.overrides {
+            if self.framework_configuration {
+                validate_framework_path(path, self.capabilities)?;
+            }
             set_path(
                 &mut merged,
                 path,
@@ -278,6 +363,9 @@ impl ConfigLoader {
             )?;
         }
 
+        if self.framework_configuration {
+            validate_resolved_capabilities(&merged, self.capabilities)?;
+        }
         Ok((merged, origins, profile))
     }
 
@@ -397,7 +485,9 @@ impl ConfigLoader {
         T: Config + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let config = self.load::<T>()?;
+        let mut loader = self.clone();
+        loader.framework_configuration |= T::FRAMEWORK_CONFIGURATION;
+        let config = loader.load::<T>()?;
         config
             .validate()
             .map_err(|error| validation_config_error::<T>(&error))?;
@@ -411,7 +501,9 @@ impl ConfigLoader {
         T: Config + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let (config, profile) = self.load_with_profile::<T>()?;
+        let mut loader = self.clone();
+        loader.framework_configuration |= T::FRAMEWORK_CONFIGURATION;
+        let (config, profile) = loader.load_with_profile::<T>()?;
         config
             .validate()
             .map_err(|error| validation_config_error::<T>(&error))?;
@@ -441,9 +533,17 @@ impl ConfigLoader {
         };
 
         if path.extension().and_then(|extension| extension.to_str()) == Some("properties") {
+            let mut input = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+            merge_properties(&mut input, &mut BTreeMap::new(), &display_path, &source)?;
+            if self.framework_configuration {
+                validate_framework_input(&input, self.capabilities)?;
+            }
             merge_properties(target, origins, &display_path, &source)
         } else {
             let value = parse_yaml(&display_path, &source)?;
+            if self.framework_configuration {
+                validate_framework_input(&value, self.capabilities)?;
+            }
             merge_yaml(target, value, "", &display_path, origins)
         }
     }
@@ -472,6 +572,21 @@ impl ConfigLoader {
             {
                 continue;
             }
+            // Reserved unavailable modules get an actionable diagnostic even
+            // though their fields are intentionally absent from the schema.
+            let lower = raw_path.to_ascii_lowercase();
+            for namespace in ["security", "actuator", "scheduler", "bootui"] {
+                if self.framework_configuration
+                    && (lower == namespace || lower.starts_with(&format!("{namespace}_")))
+                {
+                    validate_framework_path(namespace, self.capabilities)?;
+                }
+            }
+            if self.framework_configuration
+                && (lower.starts_with("security_jwt_") || lower.starts_with("security__jwt__"))
+            {
+                validate_framework_path("security.jwt", self.capabilities)?;
+            }
             let path = resolve_environment_path(schema, raw_path).map_err(|()| {
                 ConfigError::InvalidValue {
                     path: raw_path.to_ascii_lowercase(),
@@ -486,6 +601,9 @@ impl ConfigLoader {
                     path,
                     source_kind: "environment".to_owned(),
                 });
+            }
+            if self.framework_configuration {
+                validate_framework_path(&path, self.capabilities)?;
             }
             let value = value.into_string().map_err(|_| ConfigError::InvalidValue {
                 path: path.clone(),
@@ -741,8 +859,11 @@ fn omitted_secret_fields(parent_path: &str) -> &'static [&'static str] {
     // These serde-skipped keys are intentionally absent from the serialized
     // default, but remain valid deserialization targets for secret injection.
     match parent_path {
+        #[cfg(feature = "security")]
         "security.jwt" => &["secret"],
+        #[cfg(feature = "security")]
         "security.basic" => &["password"],
+        #[cfg(feature = "actuator")]
         "actuator.security" => &["bearer_token"],
         _ => &[],
     }
@@ -753,7 +874,14 @@ fn is_omitted_secret_field(parent_path: &str, field: &str) -> bool {
 }
 
 fn scheduled_task_schema() -> Option<serde_yaml::Value> {
-    serde_yaml::to_value(scafra_scheduler::ScheduledTaskConfig::default()).ok()
+    #[cfg(feature = "scheduler")]
+    {
+        serde_yaml::to_value(scafra_scheduler::ScheduledTaskConfig::default()).ok()
+    }
+    #[cfg(not(feature = "scheduler"))]
+    {
+        None
+    }
 }
 
 fn append_config_path(parent_path: &str, segment: &str) -> String {
@@ -769,4 +897,142 @@ fn validation_config_error<T: Config>(error: &T::Error) -> ConfigError {
         Some(details) => ConfigError::Validation(format!("{}: {}", details.field, details.message)),
         None => ConfigError::Validation(String::new()),
     }
+}
+
+/// Framework-owned namespaces are reserved when framework validation is selected.
+/// Validate each selected input before merging so an
+/// override cannot erase an unavailable security policy.
+fn validate_framework_input(
+    input: &serde_yaml::Value,
+    capabilities: ConfigCapabilities,
+) -> Result<(), ConfigError> {
+    let Some(mapping) = input.as_mapping() else {
+        return Ok(());
+    };
+    for (key, value) in mapping {
+        let Some(key) = key.as_str() else { continue };
+        if framework_namespace(key) {
+            validate_framework_value(key, value, capabilities)?;
+        }
+    }
+    Ok(())
+}
+
+fn framework_namespace(key: &str) -> bool {
+    matches!(
+        key,
+        "server"
+            | "logging"
+            | "startup"
+            | "security"
+            | "actuator"
+            | "scheduler"
+            | "bootui"
+            | "scafra"
+    )
+}
+
+fn validate_framework_value(
+    path: &str,
+    value: &serde_yaml::Value,
+    capabilities: ConfigCapabilities,
+) -> Result<(), ConfigError> {
+    validate_framework_path(path, capabilities)?;
+    if let Some(mapping) = value.as_mapping() {
+        for (key, child) in mapping {
+            let Some(key) = key.as_str() else {
+                return Err(framework_error(
+                    path,
+                    "framework configuration keys must be strings",
+                ));
+            };
+            validate_framework_value(&format!("{path}.{key}"), child, capabilities)?;
+        }
+    }
+    Ok(())
+}
+
+fn framework_error(path: &str, reason: &str) -> ConfigError {
+    ConfigError::InvalidValue {
+        path: path.to_owned(),
+        source_kind: reason.to_owned(),
+    }
+}
+
+fn validate_framework_path(
+    path: &str,
+    capabilities: ConfigCapabilities,
+) -> Result<(), ConfigError> {
+    let namespace = path.split('.').next().unwrap_or_default();
+    if !framework_namespace(namespace) {
+        return Ok(());
+    }
+    let available = (namespace != "security" || capabilities.security)
+        && (namespace != "actuator" || capabilities.actuator)
+        && (namespace != "scheduler" || capabilities.scheduler)
+        && (namespace != "bootui" || capabilities.bootui);
+    if !available {
+        return Err(framework_error(
+            namespace,
+            "module is unavailable; enable its Cargo feature or remove its configuration",
+        ));
+    }
+    if (path == "security.jwt" || path.starts_with("security.jwt.")) && !capabilities.jwt {
+        return Err(framework_error(
+            "security.jwt",
+            "JWT is unavailable; enable the jwt Cargo feature",
+        ));
+    }
+    if path == "security.jwt.jwk_set_uri" && !capabilities.jwks {
+        return Err(framework_error(
+            "security.jwt",
+            "remote JWT keys are unavailable; enable the jwks Cargo feature",
+        ));
+    }
+    let mut schema =
+        serde_yaml::to_value(crate::ScafraConfig::default()).map_err(|_| ConfigError::Serialize)?;
+    // The profile selector is loader-owned, rather than part of ScafraConfig.
+    if let Some(mapping) = schema.as_mapping_mut() {
+        mapping.insert(
+            "scafra".into(),
+            serde_yaml::from_str("profiles: {active: null}").map_err(|_| ConfigError::Serialize)?,
+        );
+    }
+    let normalized = path.replace("server.request_timeout_seconds", "server.timeout");
+    let parts = normalized.split('.').map(str::to_owned).collect::<Vec<_>>();
+    let dynamic_task_entry = cfg!(feature = "scheduler")
+        && parts.len() == 3
+        && parts[0] == "scheduler"
+        && parts[1] == "tasks";
+    if dynamic_task_entry || path_exists(&schema, &parts, "") {
+        Ok(())
+    } else {
+        Err(framework_error(
+            path,
+            "unknown framework configuration field",
+        ))
+    }
+}
+
+// An issuer can be a claim restriction on a locally verified token. Only the
+// resolved combination of issuer plus absence of a local secret implies remote
+// discovery, so this check runs after all precedence layers have been applied.
+fn validate_resolved_capabilities(
+    value: &serde_yaml::Value,
+    capabilities: ConfigCapabilities,
+) -> Result<(), ConfigError> {
+    let Some(jwt) = value
+        .get("security")
+        .and_then(|security| security.get("jwt"))
+    else {
+        return Ok(());
+    };
+    let has_issuer = jwt
+        .get("issuer_uri")
+        .is_some_and(|issuer| !issuer.is_null());
+    let has_secret = jwt.get("secret").is_some_and(|secret| !secret.is_null());
+    if !capabilities.jwks && has_issuer && !has_secret {
+        return Err(framework_error("security.jwt", "issuer discovery is unavailable; enable the jwks Cargo feature or configure a local secret"));
+    }
+    Ok(())
 }

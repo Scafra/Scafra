@@ -128,6 +128,8 @@ impl SecurityConfig {
         {
             return Err("basic credentials must not be empty");
         }
+        validate_capabilities(&self.jwt)?;
+        #[cfg(feature = "jwt")]
         if self.jwt.enabled {
             validate_jwt_config(&self.jwt)?;
         }
@@ -140,6 +142,29 @@ impl SecurityConfig {
     }
 }
 
+// Check intent even when authentication is disabled: unavailable verification
+// must never be accepted as a harmless configuration fallback.
+pub(super) fn validate_capabilities(config: &JwtConfig) -> Result<(), &'static str> {
+    if !cfg!(feature = "jwt")
+        && (config.enabled
+            || config.secret.is_some()
+            || config.issuer_uri.is_some()
+            || config.jwk_set_uri.is_some()
+            || !config.audiences.is_empty()
+            || !config.required_scopes.is_empty())
+    {
+        return Err("JWT configuration requires the `jwt` feature");
+    }
+    if !cfg!(feature = "jwks")
+        && (config.jwk_set_uri.is_some()
+            || (config.issuer_uri.is_some() && config.secret.is_none()))
+    {
+        return Err("remote JWT configuration requires the `jwks` feature");
+    }
+    Ok(())
+}
+
+#[cfg(feature = "jwt")]
 pub(super) fn validate_jwt_config(config: &JwtConfig) -> Result<(), &'static str> {
     if config.secret.is_none() && config.issuer_uri.is_none() && config.jwk_set_uri.is_none() {
         return Err("JWT requires secret, issuer_uri, or jwk_set_uri");
@@ -181,8 +206,9 @@ pub(super) fn validate_jwt_config(config: &JwtConfig) -> Result<(), &'static str
 
 /// Restrict provider URLs to the HTTP schemes used by the existing client.
 /// Credentials and fragments are never meaningful for discovery or JWKS URLs.
+#[cfg(feature = "jwt")]
 pub(super) fn valid_provider_url(value: &str, issuer: bool) -> bool {
-    let Ok(url) = reqwest::Url::parse(value) else {
+    let Ok(url) = url::Url::parse(value) else {
         return false;
     };
     matches!(url.scheme(), "http" | "https")

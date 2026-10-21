@@ -1,10 +1,11 @@
+#[cfg(all(feature = "actuator", feature = "security"))]
+use std::time::Duration;
 use std::{
     future::{Future, IntoFuture},
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
-    time::Duration,
 };
 
 use scafra_foundation::{
@@ -151,6 +152,7 @@ pub async fn serve_on(address: SocketAddr) -> Result<(), WebError> {
 }
 
 /// Serves the application with an explicit observation configuration.
+#[cfg(feature = "actuator")]
 pub async fn serve_on_with_actuator(
     address: SocketAddr,
     actuator: scafra_actuator::ActuatorConfig,
@@ -171,9 +173,7 @@ pub async fn serve_on_with_policy(
         address,
         (shutdown_signal(), None),
         policy,
-        scafra_actuator::ActuatorConfig::default(),
-        scafra_security::SecurityConfig::default(),
-        None,
+        crate::RouterOptions::default(),
         None,
     )
     .await
@@ -193,9 +193,7 @@ where
         address,
         (async move { Ok(shutdown.await) }, None),
         policy,
-        scafra_actuator::ActuatorConfig::default(),
-        scafra_security::SecurityConfig::default(),
-        None,
+        crate::RouterOptions::default(),
         None,
     )
     .await
@@ -203,20 +201,26 @@ where
 
 /// Serves the registered application with observation endpoints configured by
 /// the application.
+#[cfg(feature = "actuator")]
 pub async fn serve_on_with_policy_and_actuator(
     address: SocketAddr,
     policy: ShutdownPolicy,
     actuator: scafra_actuator::ActuatorConfig,
 ) -> Result<ServerOutcome, ServerError> {
-    serve_on_with_policy_and_actuator_and_security(
+    serve_router_with_options_and_callbacks(
         address,
         policy,
-        actuator,
-        scafra_security::SecurityConfig::default(),
+        crate::RouterOptions {
+            actuator,
+            ..Default::default()
+        },
+        None,
+        (|_| {}, || {}),
     )
     .await
 }
 
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub async fn serve_on_with_policy_and_actuator_and_security(
     address: SocketAddr,
     policy: ShutdownPolicy,
@@ -231,6 +235,7 @@ pub async fn serve_on_with_policy_and_actuator_and_security(
 
 /// Serves the registered application with an optional request-processing
 /// deadline, actuator and security configuration.
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub async fn serve_on_with_policy_and_actuator_and_security_and_request_timeout(
     address: SocketAddr,
     policy: ShutdownPolicy,
@@ -251,6 +256,7 @@ pub async fn serve_on_with_policy_and_actuator_and_security_and_request_timeout(
 
 /// Serves the registered application and calls `on_shutdown_requested` as
 /// soon as a shutdown signal arrives, before HTTP request draining begins.
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub async fn serve_on_with_policy_and_actuator_and_security_and_request_timeout_and_shutdown_callback<
     F,
 >(
@@ -278,6 +284,7 @@ where
 /// Serves the registered application and invokes `on_server_started` after
 /// the HTTP listener binds. The shutdown callback runs before request draining.
 #[doc(hidden)]
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub async fn serve_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks<
     F,
     S,
@@ -300,9 +307,11 @@ where
             Some(Box::new(callbacks.1) as Box<dyn FnOnce() + Send>),
         ),
         policy,
-        actuator,
-        security,
-        request_timeout,
+        crate::RouterOptions {
+            actuator,
+            security,
+            request_timeout,
+        },
         None,
     )
     .await
@@ -310,6 +319,7 @@ where
 
 /// Serves a router assembled from typed dependency injection while retaining
 /// Scafra's normal shutdown and middleware configuration.
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub async fn serve_router_on_with_policy_and_actuator_and_security_and_request_timeout(
     address: SocketAddr,
     policy: ShutdownPolicy,
@@ -332,6 +342,7 @@ pub async fn serve_router_on_with_policy_and_actuator_and_security_and_request_t
 
 /// Serves a typed application router and notifies lifecycle owners as soon as
 /// shutdown begins, before Axum drains active requests.
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub async fn serve_router_on_with_policy_and_actuator_and_security_and_request_timeout_and_shutdown_callback<
     F,
 >(
@@ -361,6 +372,7 @@ where
 /// Serves a typed application router, invokes `on_server_started` after the
 /// listener binds, and notifies lifecycle owners when shutdown begins.
 #[doc(hidden)]
+#[cfg(all(feature = "actuator", feature = "security"))]
 pub async fn serve_router_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks<
     F,
     S,
@@ -384,10 +396,92 @@ where
             Some(Box::new(callbacks.1) as Box<dyn FnOnce() + Send>),
         ),
         policy,
-        actuator,
-        security,
-        request_timeout,
-        Some(router),
+        crate::RouterOptions {
+            actuator,
+            security,
+            request_timeout,
+        },
+        Some(ApplicationRouter::Raw(router)),
+    )
+    .await
+}
+
+/// Explicit boundary between raw routers and validated finalized composition.
+#[doc(hidden)]
+pub enum ApplicationRouter {
+    Raw(axum::Router),
+    Finalized(crate::FinalizedRouter),
+}
+
+/// Serves an already validated router without duplicating middleware/caches.
+pub async fn serve_finalized_router_with_callbacks<F, S>(
+    address: SocketAddr,
+    policy: ShutdownPolicy,
+    router: crate::FinalizedRouter,
+    callbacks: (F, S),
+) -> Result<ServerOutcome, ServerError>
+where
+    F: FnOnce(ShutdownReason) + Send + 'static,
+    S: FnOnce() + Send + 'static,
+{
+    serve_application_router_with_options_and_callbacks(
+        address,
+        policy,
+        crate::RouterOptions::default(),
+        Some(ApplicationRouter::Finalized(router)),
+        callbacks,
+    )
+    .await
+}
+
+/// Shared typed serving boundary used by the facade lifecycle.
+#[doc(hidden)]
+pub async fn serve_application_router_with_options_and_callbacks<F, S>(
+    address: SocketAddr,
+    policy: ShutdownPolicy,
+    options: crate::RouterOptions,
+    router: Option<ApplicationRouter>,
+    callbacks: (F, S),
+) -> Result<ServerOutcome, ServerError>
+where
+    F: FnOnce(ShutdownReason) + Send + 'static,
+    S: FnOnce() + Send + 'static,
+{
+    serve_on_with_signal(
+        address,
+        (
+            shutdown_with_callback(shutdown_signal(), callbacks.0),
+            Some(Box::new(callbacks.1) as Box<dyn FnOnce() + Send>),
+        ),
+        policy,
+        options,
+        router,
+    )
+    .await
+}
+
+/// Serves selected HTTP integrations with the existing graceful-drain lifecycle.
+#[doc(hidden)]
+pub async fn serve_router_with_options_and_callbacks<F, S>(
+    address: SocketAddr,
+    policy: ShutdownPolicy,
+    options: crate::RouterOptions,
+    router: Option<axum::Router>,
+    callbacks: (F, S),
+) -> Result<ServerOutcome, ServerError>
+where
+    F: FnOnce(ShutdownReason) + Send + 'static,
+    S: FnOnce() + Send + 'static,
+{
+    serve_on_with_signal(
+        address,
+        (
+            shutdown_with_callback(shutdown_signal(), callbacks.0),
+            Some(Box::new(callbacks.1) as Box<dyn FnOnce() + Send>),
+        ),
+        policy,
+        options,
+        router.map(ApplicationRouter::Raw),
     )
     .await
 }
@@ -411,24 +505,28 @@ async fn serve_on_with_signal<F>(
     address: SocketAddr,
     (shutdown, on_server_started): (F, Option<Box<dyn FnOnce() + Send>>),
     policy: ShutdownPolicy,
-    actuator: scafra_actuator::ActuatorConfig,
-    security: scafra_security::SecurityConfig,
-    request_timeout: Option<Duration>,
-    supplied_router: Option<axum::Router>,
+    options: crate::RouterOptions,
+    supplied_router: Option<ApplicationRouter>,
 ) -> Result<ServerOutcome, ServerError>
 where
     F: Future<Output = Result<ShutdownReason, WebError>> + Send + 'static,
 {
-    let actuator_endpoints = actuator.enabled_endpoints().join(",");
-    scafra_foundation::startup!(
-        actuator = %actuator_endpoints,
-        security = security.enabled,
-        "web configuration initialized"
-    );
+    #[cfg(feature = "security")]
+    options.security.validate().map_err(|reason| {
+        ServerError::from(WebError::Server(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid security configuration: {reason}"),
+        )))
+    })?;
     let router = match supplied_router {
-        Some(router) => router,
-        None => crate::routing::build_router_with_timeout(&actuator, &security, request_timeout)
-            .map_err(ServerError::from)?,
+        // Supplied routers may contain generated controllers registered through
+        // their low-level adapters. Never assume the caller already installed
+        // enforcement. Check all linked controller declarations before binding.
+        Some(ApplicationRouter::Finalized(router)) => router.into_router(),
+        Some(ApplicationRouter::Raw(router)) => {
+            crate::routing::finish_supplied_router(router, &options).map_err(ServerError::from)?
+        }
+        None => crate::routing::build_router_with_options(&options).map_err(ServerError::from)?,
     };
     scafra_foundation::startup!("application routes built");
     let listener = TcpListener::bind(address)
@@ -620,10 +718,8 @@ mod shutdown_callback_tests {
             address,
             (shutdown_with_callback(shutdown, callback), None),
             ShutdownPolicy::new(Duration::from_secs(2), true),
-            scafra_actuator::ActuatorConfig::default(),
-            scafra_security::SecurityConfig::default(),
-            None,
-            Some(router),
+            crate::RouterOptions::default(),
+            Some(ApplicationRouter::Raw(router)),
         ));
 
         let mut connection = connect_when_ready(address).await;

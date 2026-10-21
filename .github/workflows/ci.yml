@@ -18,7 +18,7 @@ jobs:
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -31,3 +31,31 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --all-features --locked
+
+  consumers:
+    name: Consumer ${{ matrix.case }} / Rust ${{ matrix.rust }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ["1.88.0"]
+        case: [minimal, default, config, core, web, secure-web, jwt, jwks, actuator, scheduler, bootui, standard, all, nested, inventory]
+        include:
+          - rust: stable
+            case: minimal
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install selected Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - name: Fetch locked registry dependencies
+        run: cargo fetch --locked
+      - name: Verify isolated feature selection and runtime
+        run: python3 scripts/arch103-consumers.py "$RUNNER_TEMP/arch103-${{ matrix.case }}" --proposed --case "${{ matrix.case }}" --runtime
+      - name: Verify negative feature/configuration contracts
+        if: matrix.case == 'minimal'
+        run: python3 scripts/arch103-negative.py --output "$RUNNER_TEMP/negative" --target-dir "$RUNNER_TEMP/negative-target"
+      - name: Verify publish dependency order
+        run: python3 scripts/arch103-publish-order.py --check

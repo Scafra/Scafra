@@ -1,5 +1,16 @@
 # Configuration resolution
 
+## Configuration capability selection
+
+Generic config has no integration defaults and accepts domain fields named
+`security` or `server`. `load_validated::<ScafraConfig>()` automatically enables
+strict framework checks; `.framework()` or `.capabilities(...)` selects them
+explicitly for raw loading. In framework mode, reserved sections must match
+capabilities and unknown fields fail before merge. The standard runner narrows
+capabilities to its own features despite Cargo unification. Use validated loading
+for framework startup. See [modules](modules.md) for details.
+
+
 Scafra resolves configuration before application resources, route construction,
 or listener startup. A source read, parse, decode, or validation error stops
 startup with a typed `ConfigError` wrapped by `StartupError::Config`.

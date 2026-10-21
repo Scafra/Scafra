@@ -68,6 +68,12 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features --locked
 
+      - name: Verify publish dependency order
+        run: python3 scripts/arch103-publish-order.py --check
+
+      - name: Verify extracted packages with staged registry source
+        run: python3 scripts/arch103-package-check.py "$RUNNER_TEMP/arch103-packages"
+
       - name: Verify crates can be packaged
         shell: bash
         run: |
@@ -77,10 +83,10 @@ jobs:
             scafra-actuator
             scafra-scheduler
             scafra-security
-            scafra-macros
             scafra-config
             scafra-web
             scafra-build
+            scafra-macros
             scafra-bootui
             scafra-cli
             scafra
@@ -106,10 +112,10 @@ jobs:
             scafra-actuator
             scafra-scheduler
             scafra-security
-            scafra-macros
             scafra-config
             scafra-web
             scafra-build
+            scafra-macros
             scafra-bootui
             scafra-cli
             scafra

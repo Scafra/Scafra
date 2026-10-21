@@ -1,5 +1,10 @@
 # Scafra
 
+Scafra Cargo defaults are empty. Generated projects select `web`; select
+`security`, `jwt`, `jwks`, `actuator`, `scheduler`, `bootui`, or the `standard`
+bundle explicitly. See the [module reference and migration guide](docs/modules.md)
+for dependencies, feature combinations and fail-closed configuration behavior.
+
 Scafra is an open-source, batteries-included web application framework for Rust.
 It gives Rust applications a clear structure for composition, configuration,
 startup, routing, logging, security, and operational endpoints while keeping
@@ -362,7 +367,7 @@ impl OrderService {
 with the service type and function name; arguments and `self` are excluded by
 default so logging does not accidentally require `Debug` or expose values.
 
-The optional `scafra-bootui` dependency uses this configuration. It is disabled
+Select the facade `bootui` feature to use this configuration. BootUI is disabled
 and local-only by default. `bootui.host` must be an IPv4 or IPv6 address
 literal; the default is the IPv4 loopback address:
 
@@ -386,11 +391,11 @@ applications. It loads the rest of the application configuration once when
 the router is composed. The checked `try_layer_with_config` API is preferred
 when configuration comes from a custom source because it returns policy errors
 to the caller. If that compatibility wrapper cannot load application settings,
-it warns and uses the default server link settings; use the checked API to
-avoid that fallback.
+it logs a safe warning and leaves dashboard routes uninstalled; use the checked API
+to handle that error explicitly.
 
 BootUI's `/api/config` response is an allow-listed dashboard snapshot containing
-only `server.host` and `server.port`, which the dashboard uses for actuator
+only the server host/port and active profile, which the dashboard uses for actuator
 links. It does not serialize the application configuration. Security settings
 and credentials—including bearer tokens, Basic passwords, JWT/HMAC secrets,
 client secrets, and signing keys—are excluded, as are fields not explicitly
@@ -415,9 +420,9 @@ interface, restrict direct access with a firewall, and put the dashboard behind
 a trusted HTTPS terminator before allowing network access. Do not expose
 BootUI publicly without those protections.
 
-When using Scafra's standard runner, add `use scafra_bootui as _;` to the
-application entrypoint so the optional dependency is linked and appears in the
-startup diagnostics.
+When using Scafra's runner, enable its `bootui` Cargo feature; the facade links
+the optional dependency and starts it with the effective config/profile after
+HTTP bind. A direct BootUI package dependency alone does not select runner capabilities.
 
 The active profile can be selected from either supported configuration format:
 

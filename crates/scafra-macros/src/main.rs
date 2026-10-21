@@ -58,6 +58,7 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
         )
     })?;
     Ok(quote! {
+        ::scafra::__scafra_require_web! {
         #modules
         #graph
 
@@ -91,12 +92,10 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
             };
             runtime.block_on(async {
                     #body
-                    if let Err(error) = ::scafra::run_with_resources(|config| async move {
+                    if let Err(error) = ::scafra::run_with_finalized_resources(|config| async move {
                         let graph = __scafra_graph::compose_async().await?;
-                        let (router, resources) = graph.build_router_and_resources(
-                            &config.actuator,
-                            &config.security,
-                            config.server.request_timeout_seconds.map(::std::time::Duration::from_secs),
+                        let (router, resources) = graph.build_finalized_router_with_options_and_resources(
+                            &::scafra::router_options(&config),
                         );
                         match router {
                             Ok(router) => Ok((router, resources)),
@@ -118,6 +117,7 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
                         ::std::process::exit(1);
                     }
             });
+        }
         }
     })
 }

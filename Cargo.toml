@@ -20,7 +20,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Scafra/Scafra"
-rust-version = "1.99.1"
+rust-version = "1.88"
 
 [workspace.dependencies]
 anyhow = "1"
@@ -30,17 +30,17 @@ jsonwebtoken = "9"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde_json = "1"
 clap = { version = "4.5", features = ["derive"] }
-scafra = { path = "crates/scafra", version = "0.1.0" }
+scafra = { default-features = false, path = "crates/scafra", version = "0.1.0" }
 scafra-build = { path = "crates/scafra-build", version = "0.1.0" }
 scafra-bootui = { path = "crates/scafra-bootui", version = "0.1.0" }
-scafra-config = { path = "crates/scafra-config", version = "0.1.0" }
+scafra-config = { default-features = false, path = "crates/scafra-config", version = "0.1.0" }
 scafra-core = { path = "crates/scafra-core", version = "0.1.0" }
 scafra-foundation = { path = "crates/scafra-foundation", version = "0.1.0" }
 scafra-macros = { path = "crates/scafra-macros", version = "0.1.0" }
 scafra-actuator = { path = "crates/scafra-actuator", version = "0.1.0" }
 scafra-scheduler = { path = "crates/scafra-scheduler", version = "0.1.0" }
-scafra-security = { path = "crates/scafra-security", version = "0.1.0" }
-scafra-web = { path = "crates/scafra-web", version = "0.1.0" }
+scafra-security = { default-features = false, path = "crates/scafra-security", version = "0.1.0" }
+scafra-web = { default-features = false, path = "crates/scafra-web", version = "0.1.0" }
 http = "1"
 inventory = "0.3"
 proc-macro2 = "1"

@@ -97,6 +97,36 @@ fn cli_generates_compiling_projects_for_every_shape() {
 }
 
 #[test]
+fn cli_generates_compiling_optional_capability_projects() {
+    let workspace = TestWorkspace::new("optional-capabilities");
+    let target_dir = workspace.root.join("shared-target");
+    for capability in [
+        "security",
+        "jwt",
+        "jwks",
+        "actuator",
+        "scheduler",
+        "bootui",
+        "standard",
+    ] {
+        let project = workspace.root.join(capability);
+        run_cli(&[
+            "new",
+            project.to_str().unwrap(),
+            "--kind",
+            "api",
+            "--features",
+            capability,
+        ]);
+        let manifest = fs::read_to_string(project.join("Cargo.toml")).unwrap();
+        assert!(manifest.contains("default-features = false"));
+        assert!(manifest.contains(&format!("\"{capability}\"")));
+        assert!(manifest.contains("\"web\""));
+        cargo_check(&project, &target_dir);
+    }
+}
+
+#[test]
 fn cli_preserves_default_and_alias_and_normalizes_package_names() {
     let workspace = TestWorkspace::new("compatibility");
     let target_dir = workspace.root.join("shared-target");
@@ -125,6 +155,7 @@ fn cli_preserves_default_and_alias_and_normalizes_package_names() {
     assert!(manifest.contains("name = \"_123_catalog\""));
     assert!(manifest.contains("scafra = { path ="));
     assert!(!manifest.contains("scafra-build"));
+    assert!(manifest.contains("default-features = false, features = [\"web\"]"));
 }
 
 #[test]

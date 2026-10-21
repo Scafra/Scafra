@@ -1,3 +1,4 @@
+#![cfg(all(feature = "actuator", feature = "security", feature = "jwt"))]
 use axum::{
     body::Body,
     http::{Request, StatusCode},

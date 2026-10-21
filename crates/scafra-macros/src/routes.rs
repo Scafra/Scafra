@@ -137,7 +137,18 @@ pub(crate) fn expand_routes(
                 router = router.route(
                     &path,
                     ::scafra::web::axum::routing::#routing_function(Self::#handler)
-                        .layer(::scafra::web::axum::Extension(controller.clone())),
+                        .layer(::scafra::web::axum::Extension(controller.clone()))
+                        .layer(::scafra::web::axum::middleware::from_fn(|request, next| {
+                            ::scafra::web::__private::authorize_route(request, next,
+                                ::scafra::web::RouteAuthorizationMetadata {
+                                    controller: stringify!(#controller),
+                                    method: #http_method_literal,
+                                    prefix: <Self as ::scafra::web::ControllerPrefix>::PREFIX,
+                                    path: #path_literal,
+                                    controller_policy: <Self as ::scafra::web::ControllerPrefix>::AUTHORIZATION_POLICY,
+                                    route_policy: #route_policy,
+                                })
+                        })),
                 );
             });
             metadata.push(quote! {
@@ -170,6 +181,7 @@ pub(crate) fn expand_routes(
         quote!(router)
     };
     Ok(quote! {
+        ::scafra::__scafra_require_web! {
         #input
 
         impl #controller {
@@ -233,6 +245,7 @@ pub(crate) fn expand_routes(
                 controller: stringify!(#controller),
                 routes: #authorization_metadata_ident,
             }
+        }
         }
     })
 }

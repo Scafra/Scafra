@@ -1,0 +1,657 @@
+{
+  "baseline": {
+    "commit": "e041fc27c46e521e848ecbd3895d85b876c9b831",
+    "branch": "103-arch-01-make-scafra-framework-modules-independently-opt-in-before-100",
+    "working_tree": "?? docs/architecture/\n?? scripts/\n",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "platform": "Linux-7.2.9-1-cachyos-x86_64-with-glibc2.44",
+    "cpu_count": 8,
+    "workspace_lock_sha256": "676eefd590fb0a0d700bfeb5a0cec3fe370747eb11db08e9cb6fcb5a5ce244b3",
+    "profiles": "dev defaults; release thin LTO, codegen-units=1 (CLI template)",
+    "measurements": [
+      {
+        "label": "check-scafra",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 13.638709
+      },
+      {
+        "label": "check-scafra-actuator",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-actuator",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 6.289918
+      },
+      {
+        "label": "check-scafra-bootui",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-bootui",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 8.859549
+      },
+      {
+        "label": "check-scafra-build",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-build",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 3.055854
+      },
+      {
+        "label": "check-scafra-cli",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-cli",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 1.276464
+      },
+      {
+        "label": "check-scafra-config",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-config",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 0.068784
+      },
+      {
+        "label": "check-scafra-core",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-core",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 0.039371
+      },
+      {
+        "label": "check-scafra-foundation",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-foundation",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 0.039827
+      },
+      {
+        "label": "check-scafra-macros",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-macros",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 4.58962
+      },
+      {
+        "label": "check-scafra-scheduler",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-scheduler",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 0.202281
+      },
+      {
+        "label": "check-scafra-security",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-security",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 2.818296
+      },
+      {
+        "label": "check-scafra-web",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-web",
+          "--no-default-features"
+        ],
+        "exit_code": 0,
+        "seconds": 1.222986
+      },
+      {
+        "label": "cli-build",
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline",
+          "-p",
+          "scafra-cli"
+        ],
+        "exit_code": 0,
+        "seconds": 4.434118
+      },
+      {
+        "label": "generate-api",
+        "command": [
+          "/var/tmp/scafra-103-baseline-final/tool-target/debug/scafra",
+          "new",
+          "/var/tmp/scafra-103-baseline-final/generated-api",
+          "--kind",
+          "api"
+        ],
+        "exit_code": 0,
+        "seconds": 0.001496
+      },
+      {
+        "label": "consumer-lock",
+        "command": [
+          "cargo",
+          "generate-lockfile",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "seconds": 0.234531
+      },
+      {
+        "label": "consumer-clean-dev",
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "seconds": 22.312693
+      },
+      {
+        "label": "consumer-warm-noop",
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "seconds": 0.073891
+      },
+      {
+        "label": "consumer-incremental-edit",
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "seconds": 0.451492
+      },
+      {
+        "label": "consumer-release",
+        "command": [
+          "cargo",
+          "build",
+          "--release",
+          "--locked",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "seconds": 36.457146
+      }
+    ],
+    "consumer_lock_sha256": "65529a781c2f80385cdb2566da6f9f1eb85f3dd080b70c7e72a54e2dc7ffbd0c",
+    "consumer_manifest": "[package]\nname = \"generated_api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[dependencies]\nscafra = { path = \"../../../../home/steffenp/workspace/ember-rs/ember/crates/scafra\" }\nserde = { version = \"1\", features = [\"derive\"] }\n\n[profile.release]\nlto = \"thin\"\ncodegen-units = 1\n",
+    "consumer_normal_closure_excluding_root": 137,
+    "release_binary_bytes_unstripped": 6881760,
+    "runtime": [
+      {
+        "scenario": "default",
+        "spawn_to_first_http_seconds": 0.03016382097848691,
+        "memory": [
+          "VmHWM:\t    6432 kB",
+          "VmRSS:\t    6432 kB"
+        ],
+        "shutdown_exit_code": 0
+      },
+      {
+        "scenario": "secure",
+        "spawn_to_first_http_seconds": 0.006506092002382502,
+        "memory": [
+          "VmHWM:\t    6352 kB",
+          "VmRSS:\t    6352 kB"
+        ],
+        "shutdown_exit_code": 0
+      },
+      {
+        "scenario": "secure-actuator",
+        "spawn_to_first_http_seconds": 0.006429928995203227,
+        "memory": [
+          "VmHWM:\t    6284 kB",
+          "VmRSS:\t    6284 kB"
+        ],
+        "shutdown_exit_code": 0
+      }
+    ],
+    "workspace_lock_unchanged": true
+  },
+  "normal_dependency_counts": [
+    {
+      "name": "scafra",
+      "normal_closure_excluding_root": 136
+    },
+    {
+      "name": "scafra-actuator",
+      "normal_closure_excluding_root": 53
+    },
+    {
+      "name": "scafra-bootui",
+      "normal_closure_excluding_root": 133
+    },
+    {
+      "name": "scafra-build",
+      "normal_closure_excluding_root": 30
+    },
+    {
+      "name": "scafra-cli",
+      "normal_closure_excluding_root": 45
+    },
+    {
+      "name": "scafra-config",
+      "normal_closure_excluding_root": 131
+    },
+    {
+      "name": "scafra-core",
+      "normal_closure_excluding_root": 29
+    },
+    {
+      "name": "scafra-foundation",
+      "normal_closure_excluding_root": 27
+    },
+    {
+      "name": "scafra-macros",
+      "normal_closure_excluding_root": 31
+    },
+    {
+      "name": "scafra-scheduler",
+      "normal_closure_excluding_root": 24
+    },
+    {
+      "name": "scafra-security",
+      "normal_closure_excluding_root": 111
+    },
+    {
+      "name": "scafra-web",
+      "normal_closure_excluding_root": 126
+    }
+  ],
+  "verification": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "seconds": 0.405
+    },
+    {
+      "command": "cargo check --workspace",
+      "exit_code": 0,
+      "seconds": 0.765
+    },
+    {
+      "command": "cargo test --workspace",
+      "exit_code": 0,
+      "seconds": 250.446
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "seconds": 2.515
+    }
+  ],
+  "current_external_consumers": [
+    {
+      "case": "minimal",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "axum",
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler",
+        "scafra-security",
+        "scafra-web"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "config",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "axum",
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler",
+        "scafra-security"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "core",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "check_exit_code": 0
+    },
+    {
+      "case": "web",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler",
+        "scafra-security"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "secure-web",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "jwt",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "jwks",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "scafra-actuator",
+        "scafra-scheduler"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "actuator",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-scheduler",
+        "scafra-security"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "scheduler",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "axum",
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-security",
+        "scafra-web"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "default",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "axum",
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler",
+        "scafra-security",
+        "scafra-web"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "standard",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "check_exit_code": 0
+    },
+    {
+      "case": "all",
+      "proposed": false,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "check_exit_code": 0
+    }
+  ],
+  "supplemental_verification": [
+    {
+      "command": "cargo test -p scafra --test properties_environment",
+      "exit_code": 0,
+      "passed": 22
+    },
+    {
+      "command": "python3 scripts/arch103-baseline.py /var/tmp/scafra-103-baseline-final --measure",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/arch103-consumers.py /var/tmp/scafra-103-consumers",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/arch103-consumers.py /var/tmp/scafra-103-proposed --proposed",
+      "exit_code": 1,
+      "expected_failure": true
+    },
+    {
+      "command": "cargo test -p scafra-cli --test generated_projects generated_projects_serve_routes_and_shutdown_gracefully -- --ignored --exact",
+      "exit_code": 0,
+      "passed": 1
+    },
+    {
+      "command": "cargo test --offline (temporary downstream copy with local dependency patches)",
+      "exit_code": 101,
+      "failure": "tests/features.rs:103 BootUI expected 200, got 403; request lacks loopback ConnectInfo"
+    },
+    {
+      "command": "cargo test --offline --test http (same temporary downstream copy/patches)",
+      "exit_code": 0,
+      "passed": 3
+    },
+    {
+      "command": "cargo metadata --format-version 1 --offline --locked (fresh generated-api with archived consumer lock)",
+      "exit_code": 0,
+      "lock_unchanged": true
+    }
+  ],
+  "proposed_external_consumers": [
+    {
+      "case": "minimal",
+      "proposed": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "axum",
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler",
+        "scafra-security",
+        "scafra-web"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "config",
+      "proposed": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "axum",
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler",
+        "scafra-security"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "core",
+      "proposed": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [],
+      "check_exit_code": 0
+    },
+    {
+      "case": "web",
+      "proposed": true,
+      "lock_exit_code": 101
+    },
+    {
+      "case": "secure-web",
+      "proposed": true,
+      "lock_exit_code": 101
+    },
+    {
+      "case": "jwt",
+      "proposed": true,
+      "lock_exit_code": 101
+    },
+    {
+      "case": "jwks",
+      "proposed": true,
+      "lock_exit_code": 101
+    },
+    {
+      "case": "actuator",
+      "proposed": true,
+      "lock_exit_code": 101
+    },
+    {
+      "case": "scheduler",
+      "proposed": true,
+      "lock_exit_code": 101
+    },
+    {
+      "case": "default",
+      "proposed": true,
+      "lock_exit_code": 0,
+      "tree_exit_code": 0,
+      "forbidden_present": [
+        "axum",
+        "jsonwebtoken",
+        "reqwest",
+        "scafra-actuator",
+        "scafra-scheduler",
+        "scafra-security",
+        "scafra-web"
+      ],
+      "check_exit_code": 0
+    },
+    {
+      "case": "standard",
+      "proposed": true,
+      "lock_exit_code": 101
+    },
+    {
+      "case": "all",
+      "proposed": true,
+      "lock_exit_code": 101
+    }
+  ]
+}

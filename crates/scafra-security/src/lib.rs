@@ -9,7 +9,7 @@
 //! authentication, JWT validation, and JWKS retrieval live in separate
 //! modules. Security is disabled by default. When enabled, bearer tokens,
 //! HTTP Basic credentials, and JWTs validated with HS256 or RSA JWKS are
-//! supported. Authentication and authorization failures are denied; malformed
+//! supported when selected. Authentication and authorization failures are denied; malformed
 //! or unsupported credentials do not grant access. Shared bearer and Basic
 //! credentials authenticate requests but do not provide roles or scopes.
 //! Remote RSA keys are cached per router state for five minutes. Unknown `kid`
@@ -21,15 +21,41 @@
 //! When application security is enabled, configured bearer tokens must not be
 //! empty or whitespace-only and valid values continue to use exact matching.
 
+//!
+//! Cargo features are opt-in: the empty default provides Basic and shared
+//! bearer authentication; `jwt` adds local HS256 verification (including issuer
+//! and audience checks), and `jwks` adds bounded HTTP discovery and remote RSA
+//! verification. `jwks` implies `jwt`; `standard` enables both for migration.
+//! Call [`SecurityConfig::validate`] before serving. Configuration requesting an
+//! unavailable verifier is rejected even when JWT authentication is disabled.
+//! Unsupported verifier intent never falls back to another authenticator.
+//! Authorization declarations retain their root paths and are shared with
+//! HTTP-only code through `scafra-foundation`.
+
 mod authentication;
 mod config;
+#[cfg(feature = "jwks")]
 mod jwks;
+#[cfg(not(feature = "jwks"))]
+mod jwks {
+    // No cache or HTTP client is created for local authentication.
+    pub(super) struct JwksCache;
+    impl JwksCache {
+        pub(super) fn new() -> Self {
+            Self
+        }
+    }
+}
+#[cfg(feature = "jwt")]
 mod jwt;
 mod middleware;
 mod policy;
 
 pub use config::{BasicAuthConfig, JwtConfig, SecurityConfig};
-pub use middleware::{layer, layer_with_route_policies};
+pub use middleware::{
+    authorize_route, context_layer, guard_axum_router, layer, layer_with_route_policies,
+    SecurityContext,
+};
 pub use policy::{
     AuthorizationMode, AuthorizationPolicy, ControllerAuthorizationRegistration,
     RouteAuthorizationMetadata,

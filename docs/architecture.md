@@ -1,5 +1,15 @@
 # Architecture
 
+## Implemented modular boundaries
+
+The facade has empty Cargo defaults and explicit technology capabilities.
+Core/foundation/config support HTTP-free usage; web optionally composes security
+and actuator. Foundation owns shared authorization declarations, avoiding cycles.
+See [implemented module architecture](modules.md) for the authoritative feature,
+lifecycle and migration contract; older composition diagrams below describe
+application wiring rather than mandatory Cargo dependencies.
+
+
 ## Design goal
 
 Scafra supplies the application infrastructure that is repetitive in many web

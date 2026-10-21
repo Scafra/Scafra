@@ -1,3 +1,4 @@
+#![cfg(feature = "actuator")]
 use axum::{
     body::to_bytes,
     body::Body,
