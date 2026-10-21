@@ -309,6 +309,25 @@ The generated `src/resources/application.yaml` keeps Scafra's current defaults: 
 `127.0.0.1:8080` and logs at `info`. `SCAFRA_SERVER_PORT=9000 cargo run` is the
 existing environment override.
 
+From the project directory, the standard runner reads `src/resources/`
+automatically. When starting the executable from another working directory,
+select the configuration explicitly:
+
+```bash
+SCAFRA_CONFIG_DIR=/etc/my-app/config SCAFRA_PROFILE=production ./my-app
+```
+
+`SCAFRA_CONFIG_DIR` names an exact, required directory. Relative explicit paths
+are resolved against the process working directory; absolute paths work from
+any working directory. `SCAFRA_CONFIG_FILE` can select one required YAML, YML,
+or properties file instead. Missing explicit paths stop startup. If an
+explicit directory exists but contains no conventional configuration file,
+Scafra uses typed defaults and the environment overrides.
+
+The `scafra dev` watcher accepts `--config-dir DIR` or `--config-file FILE`.
+These paths are resolved from the directory where the CLI was invoked, passed
+to the application process, and watched for changes.
+
 ## What was generated
 
 The project includes Cargo.toml and src/main.rs,

@@ -368,18 +368,12 @@ where
     Fut: Future<Output = std::result::Result<(Option<axum::Router>, R), StartupError>>,
     R: AsyncResourceSet,
 {
-    let loader = match std::env::var("SCAFRA_PROFILE") {
-        Ok(profile) => ConfigLoader::new().profile(profile),
-        Err(_) => ConfigLoader::new(),
-    };
-    let config = loader.load_validated::<ScafraConfig>()?;
+    let loader = ConfigLoader::new();
+    let (config, profile) = loader.load_validated_with_profile::<ScafraConfig>()?;
     scafra_foundation::init_runtime_logging(&config.logging);
-    let profile = loader
-        .active_profile()
-        .unwrap_or_else(|_| "default".to_owned());
     startup!(profile = %profile, root = %loader.configuration_root().display(), "configuration loaded");
     startup!(level = %config.logging.level, "logging initialized");
-    let bootui_installed = inventory::iter::<scafra_core::OptionalExtensionRegistration>()
+    let bootui_installed = inventory::iter::<scafra_config::ConfiguredExtensionRegistration>()
         .any(|extension| extension.name == "scafra-bootui");
     if config.bootui.enabled && !bootui_installed {
         scafra_foundation::warn!(
@@ -395,7 +389,7 @@ where
         );
     }
     if config.startup.banner {
-        print_startup_banner(&config, &loader);
+        print_startup_banner(&config, &loader, &profile);
     }
     let address = format!("{}:{}", config.server.host, config.server.port)
         .parse()
@@ -445,8 +439,18 @@ where
         scheduler_shutdown.request_shutdown();
         resources_shutdown.request_shutdown(reason);
     };
+    let extension_config = config.clone();
+    let extension_profile = profile.clone();
+    let on_server_started = move || {
+        let mut extensions =
+            inventory::iter::<scafra_config::ConfiguredExtensionRegistration>().collect::<Vec<_>>();
+        extensions.sort_by_key(|extension| extension.name);
+        for extension in extensions {
+            (extension.start)(&extension_config, &extension_profile);
+        }
+    };
     let (result, reason) = match if let Some(router) = router {
-        scafra_web::serve_router_on_with_policy_and_actuator_and_security_and_request_timeout_and_shutdown_callback(
+        scafra_web::serve_router_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks(
             address,
             policy,
             config.actuator,
@@ -456,11 +460,11 @@ where
                 .request_timeout_seconds
                 .map(std::time::Duration::from_secs),
             router,
-            on_shutdown_requested,
+            (on_shutdown_requested, on_server_started),
         )
         .await
     } else {
-        scafra_web::serve_on_with_policy_and_actuator_and_security_and_request_timeout_and_shutdown_callback(
+        scafra_web::serve_on_with_policy_and_actuator_and_security_and_request_timeout_and_callbacks(
             address,
             policy,
             config.actuator,
@@ -469,7 +473,7 @@ where
                 .server
                 .request_timeout_seconds
                 .map(std::time::Duration::from_secs),
-            on_shutdown_requested,
+            (on_shutdown_requested, on_server_started),
         )
         .await
     } {
@@ -509,7 +513,7 @@ where
     }
 }
 
-fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader) {
+fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader, profile: &str) {
     let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
     if !config.startup.show_config {
         println!(
@@ -525,9 +529,6 @@ fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader) {
     } else {
         endpoints.join(", ")
     };
-    let profile = loader
-        .active_profile()
-        .unwrap_or_else(|_| "default".to_owned());
     let logo = [
         "  ███████╗███╗   ███╗██████╗ ███████╗██████╗",
         "  ██╔════╝████╗ ████║██╔══██╗██╔════╝██╔══██╗",
@@ -561,7 +562,7 @@ fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader) {
             color
         ),
         label("profile"),
-        paint(&profile, "35", color),
+        paint(profile, "35", color),
         label("log level"),
         paint(&config.logging.level.to_string(), "38;5;208", color),
         label("actuator"),

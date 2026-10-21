@@ -1062,6 +1062,7 @@ dependencies = [
  "inventory",
  "jsonwebtoken",
  "scafra-actuator",
+ "scafra-bootui",
  "scafra-config",
  "scafra-core",
  "scafra-foundation",
@@ -1070,6 +1071,7 @@ dependencies = [
  "scafra-security",
  "scafra-web",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tower",
@@ -1133,6 +1135,7 @@ dependencies = [
 name = "scafra-config"
 version = "0.1.0"
 dependencies = [
+ "inventory",
  "scafra-actuator",
  "scafra-foundation",
  "scafra-scheduler",

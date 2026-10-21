@@ -30,6 +30,11 @@ The generated server listens on `127.0.0.1:8080` by default. Configuration can
 be placed in `src/resources/application.yaml` or
 `src/resources/application.properties`.
 
+The generated application reads `src/resources/` when started from its project
+directory. If it starts from another working directory, set an explicit
+`SCAFRA_CONFIG_DIR`; see the [configuration guide](configuration.md) for path
+rules, profiles, and deployment examples.
+
 ## Run the checks
 
 From the Scafra workspace:

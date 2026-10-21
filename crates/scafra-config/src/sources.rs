@@ -14,7 +14,13 @@ use crate::{
     },
 };
 
-const SCAFRA_ENV_CONTROLS: [&str; 3] = ["PROFILE", "DEV_CHILD", "DEV_RELOAD"];
+const SCAFRA_ENV_CONTROLS: [&str; 5] = [
+    "PROFILE",
+    "CONFIG_DIR",
+    "CONFIG_FILE",
+    "DEV_CHILD",
+    "DEV_RELOAD",
+];
 pub fn load_yaml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, ConfigError> {
     let path = path.as_ref();
     let display_path = path.display().to_string();
@@ -87,19 +93,36 @@ impl<T> Properties<T> {
 /// Loader implementing Scafra's configuration precedence chain:
 /// defaults, base YAML/YML/properties files, profile YAML/YML/properties
 /// files, sorted environment values, then explicit overrides. Missing files
-/// are ignored; every other source failure stops startup.
+/// in a selected directory are optional; explicitly selected directories and
+/// files must exist. Every other source failure stops loading.
 #[derive(Debug, Clone)]
 pub struct ConfigLoader {
-    root: PathBuf,
+    source: ConfigSource,
     profile: Option<String>,
     env_prefix: String,
     overrides: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone)]
+enum ConfigSource {
+    Default,
+    ProjectRoot(PathBuf),
+    Directory(PathBuf),
+    File(PathBuf),
+}
+
+#[derive(Debug, Clone)]
+enum ResolvedSource {
+    Directory(PathBuf),
+    File(PathBuf),
+}
+
+type MergedConfiguration = (serde_yaml::Value, BTreeMap<String, String>, Option<String>);
+
 impl Default for ConfigLoader {
     fn default() -> Self {
         Self {
-            root: PathBuf::from("."),
+            source: ConfigSource::Default,
             profile: None,
             env_prefix: "SCAFRA".to_owned(),
             overrides: BTreeMap::new(),
@@ -112,8 +135,28 @@ impl ConfigLoader {
         Self::default()
     }
 
+    /// Selects an application root. For compatibility, `src/resources/` is
+    /// used when that directory exists; otherwise the root itself is used.
+    /// The selected application root must exist.
     pub fn root(mut self, root: impl Into<PathBuf>) -> Self {
-        self.root = root.into();
+        self.source = ConfigSource::ProjectRoot(root.into());
+        self
+    }
+
+    /// Selects an exact configuration directory. The directory must exist.
+    /// Relative paths are resolved against the process working directory when
+    /// configuration is loaded. Conventional files inside it remain optional.
+    pub fn config_dir(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.source = ConfigSource::Directory(directory.into());
+        self
+    }
+
+    /// Selects one required YAML, YML, or properties file as the base source.
+    /// Relative paths are resolved against the process working directory when
+    /// configuration is loaded. Profile files, when selected, are read from
+    /// the same directory as this file.
+    pub fn file(mut self, file: impl Into<PathBuf>) -> Self {
+        self.source = ConfigSource::File(file.into());
         self
     }
 
@@ -145,8 +188,19 @@ impl ConfigLoader {
     where
         T: DeserializeOwned + Serialize + Default,
     {
-        let (merged, origins) = self.load_merged::<T>()?;
+        let (merged, origins, _) = self.load_merged::<T>()?;
         serde_yaml::from_value(merged).map_err(|error| decode_error(error, &origins))
+    }
+
+    /// Loads a typed value and returns the profile used to resolve it.
+    pub fn load_with_profile<T>(&self) -> Result<(T, String), ConfigError>
+    where
+        T: DeserializeOwned + Serialize + Default,
+    {
+        let (merged, origins, profile) = self.load_merged::<T>()?;
+        let config =
+            serde_yaml::from_value(merged).map_err(|error| decode_error(error, &origins))?;
+        Ok((config, profile.unwrap_or_else(|| "default".to_owned())))
     }
 
     pub fn load_properties<T>(&self) -> Result<T, ConfigError>
@@ -154,7 +208,7 @@ impl ConfigLoader {
         T: ConfigProperties + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let (merged, origins) = self.load_merged::<serde_yaml::Value>()?;
+        let (merged, origins, _) = self.load_merged::<serde_yaml::Value>()?;
         let value = if T::CONFIG_PREFIX.is_empty() {
             merged
         } else {
@@ -179,31 +233,26 @@ impl ConfigLoader {
         Ok(config)
     }
 
-    fn load_merged<T>(&self) -> Result<(serde_yaml::Value, BTreeMap<String, String>), ConfigError>
+    fn load_merged<T>(&self) -> Result<MergedConfiguration, ConfigError>
     where
         T: Serialize + Default,
     {
-        let profile = self.selected_profile()?;
-        validate_profile(profile.as_deref())?;
-
+        let source = self.resolve_source()?;
         let schema = serde_yaml::to_value(T::default()).map_err(|_| ConfigError::Serialize)?;
         let mut merged = schema.clone();
         let mut origins = BTreeMap::new();
+        self.merge_base_sources(&mut merged, &mut origins, &source)?;
+        let profile = self.profile_from_base(&merged)?;
+        validate_profile(profile.as_deref())?;
 
-        let config_root = self.configuration_root();
-        for extension in SOURCE_EXTENSIONS {
-            self.merge_file(
-                &mut merged,
-                &mut origins,
-                config_root.join(format!("application.{extension}")),
-            )?;
-        }
         if let Some(profile) = &profile {
+            let config_root = source.directory();
             for extension in SOURCE_EXTENSIONS {
                 self.merge_file(
                     &mut merged,
                     &mut origins,
                     config_root.join(format!("application-{profile}.{extension}")),
+                    false,
                 )?;
             }
         }
@@ -220,28 +269,31 @@ impl ConfigLoader {
             )?;
         }
 
-        Ok((merged, origins))
+        Ok((merged, origins, profile))
     }
 
     fn selected_profile(&self) -> Result<Option<String>, ConfigError> {
+        let mut base = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let mut origins = BTreeMap::new();
+        let source = self.resolve_source()?;
+        self.merge_base_sources(&mut base, &mut origins, &source)?;
+        self.profile_from_base(&base)
+    }
+
+    fn profile_from_base(&self, base: &serde_yaml::Value) -> Result<Option<String>, ConfigError> {
         if let Some(profile) = &self.profile {
             return Ok(Some(profile.clone()));
         }
-
-        let mut base = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
-        let mut origins = BTreeMap::new();
-        let config_root = self.configuration_root();
-        for extension in SOURCE_EXTENSIONS {
-            self.merge_file(
-                &mut base,
-                &mut origins,
-                config_root.join(format!("application.{extension}")),
-            )?;
+        if let Some(profile) = env::var_os("SCAFRA_PROFILE") {
+            return profile
+                .into_string()
+                .map(Some)
+                .map_err(|_| ConfigError::InvalidProfile);
         }
 
         let active = ["scafra", "profiles", "active"]
             .into_iter()
-            .try_fold(&base, |value, segment| match value {
+            .try_fold(base, |value, segment| match value {
                 serde_yaml::Value::Mapping(map) => {
                     map.get(serde_yaml::Value::String(segment.to_owned()))
                 }
@@ -252,13 +304,82 @@ impl ConfigLoader {
         Ok(active)
     }
 
-    /// Returns the directory from which application configuration is loaded.
+    fn resolve_source(&self) -> Result<ResolvedSource, ConfigError> {
+        match &self.source {
+            ConfigSource::Default => {
+                let directory = env::var_os("SCAFRA_CONFIG_DIR");
+                let file = env::var_os("SCAFRA_CONFIG_FILE");
+                match (directory, file) {
+                    (Some(_), Some(_)) => Err(ConfigError::InvalidValue {
+                        path: "SCAFRA_CONFIG_DIR/SCAFRA_CONFIG_FILE".to_owned(),
+                        source_kind: "both configuration source selectors cannot be set".to_owned(),
+                    }),
+                    (Some(directory), None) => {
+                        let directory = PathBuf::from(directory);
+                        validate_source_directory(&directory, "configuration directory")?;
+                        Ok(ResolvedSource::Directory(directory))
+                    }
+                    (None, Some(file)) => {
+                        let file = PathBuf::from(file);
+                        validate_source_file(&file)?;
+                        Ok(ResolvedSource::File(file))
+                    }
+                    (None, None) => Ok(ResolvedSource::Directory(resolve_project_root(
+                        Path::new("."),
+                        false,
+                    )?)),
+                }
+            }
+            ConfigSource::ProjectRoot(root) => {
+                Ok(ResolvedSource::Directory(resolve_project_root(root, true)?))
+            }
+            ConfigSource::Directory(directory) => {
+                validate_source_directory(directory, "configuration directory")?;
+                Ok(ResolvedSource::Directory(directory.clone()))
+            }
+            ConfigSource::File(file) => {
+                validate_source_file(file)?;
+                Ok(ResolvedSource::File(file.clone()))
+            }
+        }
+    }
+
+    fn merge_base_sources(
+        &self,
+        target: &mut serde_yaml::Value,
+        origins: &mut BTreeMap<String, String>,
+        source: &ResolvedSource,
+    ) -> Result<(), ConfigError> {
+        match source {
+            ResolvedSource::Directory(directory) => {
+                for extension in SOURCE_EXTENSIONS {
+                    self.merge_file(
+                        target,
+                        origins,
+                        directory.join(format!("application.{extension}")),
+                        false,
+                    )?;
+                }
+            }
+            ResolvedSource::File(file) => {
+                self.merge_file(target, origins, file.clone(), true)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns the effective configuration directory, or the parent directory
+    /// when a single file is selected. The default convention uses
+    /// `src/resources/` when present and otherwise the process working directory.
     pub fn configuration_root(&self) -> PathBuf {
-        let resources = self.root.join("src").join("resources");
-        if resources.is_dir() {
-            resources
-        } else {
-            self.root.clone()
+        match self.resolve_source() {
+            Ok(source) => source.directory(),
+            Err(_) => match &self.source {
+                ConfigSource::Default => PathBuf::from("."),
+                ConfigSource::ProjectRoot(root)
+                | ConfigSource::Directory(root)
+                | ConfigSource::File(root) => root.clone(),
+            },
         }
     }
 
@@ -274,16 +395,34 @@ impl ConfigLoader {
         Ok(config)
     }
 
+    /// Loads and validates a typed value and returns the profile used to
+    /// resolve it.
+    pub fn load_validated_with_profile<T>(&self) -> Result<(T, String), ConfigError>
+    where
+        T: Config + DeserializeOwned + Serialize + Default,
+        T::Error: std::fmt::Display,
+    {
+        let (config, profile) = self.load_with_profile::<T>()?;
+        config
+            .validate()
+            .map_err(|error| validation_config_error::<T>(&error))?;
+        Ok((config, profile))
+    }
+
     fn merge_file(
         &self,
         target: &mut serde_yaml::Value,
         origins: &mut BTreeMap<String, String>,
         path: PathBuf,
+        required: bool,
     ) -> Result<(), ConfigError> {
         let display_path = path.display().to_string();
         let source = match fs::read_to_string(&path) {
             Ok(source) => source,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound && !required => return Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Err(missing_source(&path, "configuration file"))
+            }
             Err(source) => {
                 return Err(ConfigError::Read {
                     path: display_path,
@@ -353,6 +492,96 @@ impl ConfigLoader {
             )?;
         }
         Ok(())
+    }
+}
+
+impl ResolvedSource {
+    fn directory(&self) -> PathBuf {
+        match self {
+            Self::Directory(directory) => directory.clone(),
+            Self::File(file) => file
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."))
+                .to_owned(),
+        }
+    }
+}
+
+fn resolve_project_root(root: &Path, required: bool) -> Result<PathBuf, ConfigError> {
+    if required {
+        validate_source_directory(root, "application root")?;
+    }
+
+    let resources = root.join("src").join("resources");
+    match fs::metadata(&resources) {
+        Ok(metadata) if metadata.is_dir() => Ok(resources),
+        Ok(_) => Ok(root.to_owned()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(root.to_owned()),
+        Err(source) => Err(ConfigError::Read {
+            path: resources.display().to_string(),
+            source,
+        }),
+    }
+}
+
+fn validate_source_directory(path: &Path, source_kind: &'static str) -> Result<(), ConfigError> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Ok(()),
+        Ok(_) => Err(invalid_source_path(path, source_kind, "a directory")),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            Err(missing_source(path, source_kind))
+        }
+        Err(source) => Err(ConfigError::Read {
+            path: path.display().to_string(),
+            source,
+        }),
+    }
+}
+
+fn validate_source_file(path: &Path) -> Result<(), ConfigError> {
+    if !matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("yaml" | "yml" | "properties")
+    ) {
+        return Err(invalid_source_path(
+            path,
+            "configuration file",
+            "a `.yaml`, `.yml`, or `.properties` file",
+        ));
+    }
+
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(()),
+        Ok(_) => Err(invalid_source_path(
+            path,
+            "configuration file",
+            "a regular file",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            Err(missing_source(path, "configuration file"))
+        }
+        Err(source) => Err(ConfigError::Read {
+            path: path.display().to_string(),
+            source,
+        }),
+    }
+}
+
+fn missing_source(path: &Path, source_kind: &str) -> ConfigError {
+    ConfigError::Read {
+        path: path.display().to_string(),
+        source: io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("required {source_kind} does not exist"),
+        ),
+    }
+}
+
+fn invalid_source_path(path: &Path, source_kind: &str, expected: &str) -> ConfigError {
+    ConfigError::InvalidValue {
+        path: path.display().to_string(),
+        source_kind: format!("invalid {source_kind} path; expected {expected}"),
     }
 }
 

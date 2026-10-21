@@ -42,6 +42,35 @@ fn accepts_microservice_as_service_alias() {
 }
 
 #[test]
+fn dev_accepts_one_explicit_configuration_selector() {
+    let config_dir = PathBuf::from("/etc/scafra/config");
+    let cli = Cli::try_parse_from([
+        "scafra",
+        "dev",
+        "--config-dir",
+        config_dir.to_str().unwrap(),
+    ])
+    .unwrap();
+    assert!(matches!(
+        cli.command,
+        CommandKind::Dev {
+            config_dir: Some(path),
+            config_file: None
+        } if path == config_dir
+    ));
+
+    assert!(Cli::try_parse_from([
+        "scafra",
+        "dev",
+        "--config-dir",
+        "/etc/scafra/config",
+        "--config-file",
+        "/etc/scafra/application.yaml",
+    ])
+    .is_err());
+}
+
+#[test]
 fn normalizes_destination_name_for_cargo() {
     assert_eq!(normalize_package_name("billing-api"), "billing_api");
     assert_eq!(normalize_package_name("123 catalog"), "_123_catalog");

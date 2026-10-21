@@ -176,6 +176,8 @@ fn application_defaults_are_loaded() {
         .args(["--test", "configuration"])
         .env("CARGO_TARGET_DIR", &target_dir)
         .env_remove("SCAFRA_PROFILE")
+        .env_remove("SCAFRA_CONFIG_DIR")
+        .env_remove("SCAFRA_CONFIG_FILE")
         .env_remove("SCAFRA_SERVER_HOST")
         .env_remove("SCAFRA_SERVER_PORT")
         .env_remove("SCAFRA_LOGGING_LEVEL")
@@ -186,6 +188,110 @@ fn application_defaults_are_loaded() {
         "generated default configuration test failed:\n{}\n{}",
         text(&output.stdout),
         text(&output.stderr)
+    );
+}
+
+#[test]
+fn generated_project_loads_explicit_configuration_from_another_working_directory() {
+    let workspace = TestWorkspace::new("explicit-configuration-directory");
+    let target_dir = workspace.root.join("shared-target");
+    let project = workspace.root.join("web");
+    let unexpected_directory = workspace.root.join("unexpected-working-directory");
+    fs::create_dir(&unexpected_directory).unwrap();
+
+    run_cli(&["new", project.to_str().unwrap()]);
+    fs::write(
+        project.join("src/resources/application-production.yaml"),
+        "server:\n  port: 8189\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("tests/configuration.rs"),
+        r#"use scafra::{ConfigLoader, ScafraConfig};
+use std::path::PathBuf;
+
+#[test]
+fn explicit_configuration_is_used_outside_the_project_directory() {
+    if std::env::var_os("SCFRA_GENERATED_CONFIG_TEST").is_none() {
+        return;
+    }
+    assert_eq!(
+        std::env::current_dir().unwrap(),
+        PathBuf::from(std::env::var_os("EXPECTED_TEST_WORKING_DIRECTORY").unwrap())
+    );
+    let (config, profile) = ConfigLoader::new()
+        .load_validated_with_profile::<ScafraConfig>()
+        .unwrap();
+    assert_eq!(profile, "production");
+    assert_eq!(config.server.port, 8189);
+}
+"#,
+    )
+    .unwrap();
+
+    let build = Command::new("cargo")
+        .args(["test", "--no-run", "--offline", "--manifest-path"])
+        .arg(project.join("Cargo.toml"))
+        .args(["--test", "configuration"])
+        .current_dir(&unexpected_directory)
+        .env("CARGO_TARGET_DIR", &target_dir)
+        .env_remove("SCAFRA_CONFIG_FILE")
+        .env_remove("SCAFRA_CONFIG_DIR")
+        .output()
+        .unwrap_or_else(|error| panic!("could not build generated config test: {error}"));
+    assert!(
+        build.status.success(),
+        "generated config test build failed:\n{}\n{}",
+        text(&build.stdout),
+        text(&build.stderr)
+    );
+
+    let test_binary = generated_test_binary(&target_dir, "configuration");
+    let output = Command::new(&test_binary)
+        .args([
+            "--exact",
+            "explicit_configuration_is_used_outside_the_project_directory",
+            "--nocapture",
+        ])
+        .current_dir(&unexpected_directory)
+        .env("SCFRA_GENERATED_CONFIG_TEST", "1")
+        .env("EXPECTED_TEST_WORKING_DIRECTORY", &unexpected_directory)
+        .env("SCAFRA_CONFIG_DIR", project.join("src/resources"))
+        .env("SCAFRA_PROFILE", "production")
+        .env_remove("SCAFRA_CONFIG_FILE")
+        .env_remove("SCAFRA_SERVER_HOST")
+        .env_remove("SCAFRA_SERVER_PORT")
+        .output()
+        .unwrap_or_else(|error| panic!("could not start generated explicit config test: {error}"));
+
+    assert!(
+        output.status.success(),
+        "generated explicit configuration test failed:\n{}\n{}",
+        text(&output.stdout),
+        text(&output.stderr)
+    );
+}
+
+fn generated_test_binary(target_dir: &Path, test_name: &str) -> PathBuf {
+    let dependencies = target_dir.join("debug/deps");
+    for entry in fs::read_dir(&dependencies).unwrap() {
+        let path = entry.unwrap().path();
+        if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name.starts_with(&format!("{test_name}-"))
+                    && (std::env::consts::EXE_EXTENSION.is_empty() && path.extension().is_none()
+                        || path.extension().and_then(|extension| extension.to_str())
+                            == Some(std::env::consts::EXE_EXTENSION))
+            })
+        {
+            return path;
+        }
+    }
+    panic!(
+        "could not find generated test executable under {}",
+        dependencies.display()
     );
 }
 
@@ -216,6 +322,8 @@ fn server_port_environment_override_is_loaded() {
         .args(["--test", "configuration"])
         .env("CARGO_TARGET_DIR", &target_dir)
         .env_remove("SCAFRA_PROFILE")
+        .env_remove("SCAFRA_CONFIG_DIR")
+        .env_remove("SCAFRA_CONFIG_FILE")
         .env_remove("SCAFRA_SERVER_HOST")
         .env("SCAFRA_SERVER_PORT", "9001")
         .env_remove("SCAFRA_LOGGING_LEVEL")
@@ -261,6 +369,8 @@ fn yml_source_is_loaded() {
         .args(["--test", "configuration"])
         .env("CARGO_TARGET_DIR", &target_dir)
         .env_remove("SCAFRA_PROFILE")
+        .env_remove("SCAFRA_CONFIG_DIR")
+        .env_remove("SCAFRA_CONFIG_FILE")
         .env_remove("SCAFRA_SERVER_HOST")
         .env_remove("SCAFRA_SERVER_PORT")
         .env_remove("SCAFRA_LOGGING_LEVEL")
@@ -292,6 +402,8 @@ fn properties_source_is_loaded() {
         .args(["--test", "configuration"])
         .env("CARGO_TARGET_DIR", &target_dir)
         .env_remove("SCAFRA_PROFILE")
+        .env_remove("SCAFRA_CONFIG_DIR")
+        .env_remove("SCAFRA_CONFIG_FILE")
         .env_remove("SCAFRA_SERVER_HOST")
         .env_remove("SCAFRA_SERVER_PORT")
         .env_remove("SCAFRA_LOGGING_LEVEL")
@@ -959,6 +1071,8 @@ fn assert_project_layout(project: &Path, kind: Kind) {
     let readme = fs::read_to_string(project.join("README.md")).unwrap();
     assert!(readme.contains(&format!("GET {}", kind.route())));
     assert!(readme.contains("SCAFRA_SERVER_PORT=9000 cargo run"));
+    assert!(readme.contains("SCAFRA_CONFIG_DIR=/etc/my-app/config"));
+    assert!(readme.contains("scafra dev"));
 
     let manifest = fs::read_to_string(project.join("Cargo.toml")).unwrap();
     let has_serde = manifest.contains("serde = { version = \"1\", features = [\"derive\"] }");

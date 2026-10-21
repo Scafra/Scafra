@@ -1,11 +1,14 @@
 //! Typed configuration primitives.
 
 mod errors;
+mod extensions;
 mod merge;
 mod models;
 mod sources;
 
 pub use errors::ConfigError;
+#[doc(hidden)]
+pub use extensions::ConfiguredExtensionRegistration;
 pub use models::{BootUiConfig, ScafraConfig, ServerConfig, StartupConfig, ValidationError};
 pub use scafra_foundation::{BacktraceMode, LogLevel, LoggingConfig};
 pub use scafra_scheduler::{SchedulerConfig, SchedulerConfigError};
