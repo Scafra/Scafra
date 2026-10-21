@@ -155,8 +155,10 @@ def runtime(project, binary, name, env):
                 # The operational token policy is independent of global security.
                 for path in ["/health", "/live", "/ready", "/actuator/health/readiness"]:
                     assert request(port, path)[0] in {401, 404}
+                    assert request(port, path, "wrong-operational-token")[0] in {401, 404}
                     assert request(port, path, "arch103-token")[0] == 200
                 checks["actuator"] = True
+                checks["actuator_invalid_token"] = "rejected"
             if bootui_port:
                 dashboard_start = time.monotonic()
                 while True:
@@ -219,6 +221,8 @@ def main():
     parser.add_argument("--proposed", action="store_true", help="compatibility flag; the contract is now implemented")
     parser.add_argument("--case", choices=[case[0] for case in CASES])
     parser.add_argument("--runtime", action="store_true")
+    parser.add_argument("--timeout", type=int, default=240,
+                        help="per Cargo command timeout in seconds")
     parser.add_argument("--target-dir", type=Path, help="reuse a Cargo target outside the checkout")
     args = parser.parse_args()
     out = args.output.resolve()
@@ -286,7 +290,16 @@ def main():
             ("build" if args.runtime else "check", ["cargo", "build" if args.runtime else "check", "--offline", "--locked"]),
         ]
         for label, command in commands:
-            process = subprocess.run(command, cwd=project, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            try:
+                process = subprocess.run(command, cwd=project, env=env, text=True,
+                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                         timeout=args.timeout)
+            except subprocess.TimeoutExpired as error:
+                output = error.stdout or b""
+                if isinstance(output, bytes):
+                    output = output.decode(errors="replace")
+                process = subprocess.CompletedProcess(command, -1,
+                    output + f"\nCOMMAND TIMED OUT after {args.timeout} seconds\n")
             (project / (label + ".log")).write_text(process.stdout)
             entry[label + "_exit_code"] = process.returncode
             if label == "tree" and not process.returncode:

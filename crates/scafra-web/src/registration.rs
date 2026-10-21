@@ -20,6 +20,11 @@ pub struct ControllerRegistration {
 inventory::collect!(ControllerRegistration);
 
 /// Implemented by generated controller route adapters.
+///
+/// These low-level methods install handlers, not authorization middleware.
+/// Finalize with `finish_router_with_options` and complete `route_metadata()`.
+/// Static metadata assumes the declared prefix; Axum nesting/path rewrites do
+/// not update it. Generated graph composition preserves this contract.
 pub trait ControllerRoutes: Send + Sync + 'static {
     fn register_routes(router: Router) -> Router
     where

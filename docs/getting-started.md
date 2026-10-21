@@ -9,7 +9,7 @@ requires application-supplied credentials. See [module reference](modules.md).
 
 ## Requirements
 
-- Rust 1.99.1 or newer (use the latest stable release)
+- Rust 1.88 or newer (use the latest stable release)
 - Cargo
 
 The CLI is currently run from this workspace.

@@ -19,6 +19,7 @@ impl Directory {
     }
     fn loader(&self) -> ConfigLoader {
         ConfigLoader::new()
+            .framework()
             .config_dir(&self.0)
             .env_prefix("SCAFRA_MODULAR_TEST_UNUSED")
     }
@@ -263,4 +264,119 @@ fn local_jwt_issuer_and_audience_work_without_remote_keys() {
         .to_string()
         .contains("issuer discovery is unavailable"));
     assert!(!error.to_string().contains("issuer.example.test"));
+}
+
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+struct DomainSettings {
+    #[serde(default)]
+    security: DomainSecurity,
+    #[serde(default)]
+    server: DomainServer,
+}
+
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+struct DomainSecurity {
+    classification: String,
+}
+
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+struct DomainServer {
+    region: String,
+}
+
+#[test]
+fn generic_yaml_accepts_domain_security_and_server_subtrees() {
+    let directory = Directory::new();
+    let file = directory.0.join("domain.yaml");
+    fs::write(
+        &file,
+        "security: {classification: internal}\nserver: {region: eu}\n",
+    )
+    .unwrap();
+    let settings = scafra_config::load_yaml::<DomainSettings>(&file).unwrap();
+    assert_eq!(settings.security.classification, "internal");
+    assert_eq!(settings.server.region, "eu");
+}
+
+#[test]
+fn generic_loader_accepts_domain_security_and_server_subtrees() {
+    let directory = Directory::new();
+    fs::write(
+        directory.0.join("application.yaml"),
+        "security: {classification: internal}\nserver: {region: eu}\n",
+    )
+    .unwrap();
+    let settings = ConfigLoader::new()
+        .config_dir(&directory.0)
+        .env_prefix("DOMAIN_TEST_UNUSED")
+        .override_value("security.classification", "restricted")
+        .load::<DomainSettings>()
+        .unwrap();
+    assert_eq!(settings.security.classification, "restricted");
+    assert_eq!(settings.server.region, "eu");
+}
+
+impl scafra_config::Config for DomainSettings {
+    type Error = std::convert::Infallible;
+    fn validate(&self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+impl scafra_config::ConfigProperties for DomainSettings {
+    const CONFIG_PREFIX: &'static str = "";
+}
+
+#[test]
+fn generic_validated_properties_accept_domain_names_and_environment_overrides() {
+    let directory = Directory::new();
+    fs::write(
+        directory.0.join("application-prod.yaml"),
+        "security: {classification: internal}\nserver: {region: eu}\n",
+    )
+    .unwrap();
+    let prefix = format!("DOMAIN_REVIEW_{}", std::process::id());
+    let key = format!("{prefix}_SECURITY__CLASSIFICATION");
+    std::env::set_var(&key, "restricted");
+    let loader = ConfigLoader::new()
+        .config_dir(&directory.0)
+        .profile("prod")
+        .env_prefix(prefix);
+    let result = scafra_config::Properties::<DomainSettings>::with_loader(loader.clone()).load();
+    let validated = loader.load_validated::<DomainSettings>();
+    std::env::remove_var(key);
+    assert_eq!(result.unwrap().security.classification, "restricted");
+    assert_eq!(validated.unwrap().server.region, "eu");
+}
+
+#[test]
+fn validated_framework_config_automatically_checks_selected_inputs_before_merge() {
+    let directory = Directory::new();
+    fs::write(
+        directory.0.join("application.yaml"),
+        "server: {prot: secret-must-not-appear}\n",
+    )
+    .unwrap();
+    let loader = ConfigLoader::new()
+        .config_dir(&directory.0)
+        .env_prefix("FRAMEWORK_REVIEW_UNUSED");
+    for error in [
+        loader.load_validated::<ScafraConfig>().unwrap_err(),
+        loader
+            .load_validated_with_profile::<ScafraConfig>()
+            .unwrap_err(),
+    ] {
+        assert!(error.to_string().contains("server.prot"));
+        assert!(!format!("{error:?}").contains("secret-must-not-appear"));
+    }
+    #[cfg(not(feature = "security"))]
+    {
+        fs::write(directory.0.join("application.yaml"), "security: {}\n").unwrap();
+        assert!(loader
+            .override_value("security", "null")
+            .load_validated::<ScafraConfig>()
+            .unwrap_err()
+            .to_string()
+            .contains("module is unavailable"));
+    }
 }

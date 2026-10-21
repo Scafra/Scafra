@@ -1,12 +1,14 @@
 # ARCH-01 implementation and verification report
 
-This report covers the complete implementation requested after Phase 0. Changes
-remain uncommitted on branch
-`103-arch-01-make-scafra-framework-modules-independently-opt-in-before-100`, based
-on HEAD `e041fc27c46e521e848ecbd3895d85b876c9b831`. No branch switch, commit,
-push, merge, PR, publication or issue closure was performed. Phase 0 work was
-preserved. [Modules](../../modules.md) is the current public feature/migration
-reference; the original audits/baseline remain historical evidence.
+This is the historical implementation report for commit
+`35b267168ec08a8b42fb3053b86dc2f38ce937b5`, committed and pushed on branch
+`103-arch-01-make-scafra-framework-modules-independently-opt-in-before-100`.
+Its merge base is `e041fc27c46e521e848ecbd3895d85b876c9b831`.
+The original local measurements/checklists below are not fresh independent review
+results. See [final review](final-review.md) for corrections, current verification,
+MSRV justification and readiness. [Modules](../../modules.md) is the current
+public feature/migration reference; the audits/baseline remain historical evidence.
+No merge, release or issue closure is asserted.
 
 ## Final architecture
 
@@ -28,7 +30,7 @@ cannot enforce. Typed graph generation and ownership remain compile-time Rust.
 
 | Phase | Implemented files / APIs | Focused verification and remaining limits |
 | --- | --- | --- |
-| 1 Configuration | config manifest, models/lib/sources; new ConfigCapabilities and loader.capabilities; modular tests and crate README; BootUI forwarding | No-default/all-feature/actuator/JWT config tests and Clippy pass; #78's 22 regressions pass. Generic signatures and #75 precedence preserved. Framework namespaces now reserved for all loaders; deliberate migration |
+| 1 Configuration | config manifest, models/lib/sources; new ConfigCapabilities and loader.capabilities; modular tests and crate README; BootUI forwarding | No-default/all-feature/actuator/JWT config tests and Clippy pass; #78's 22 regressions pass. Generic signatures and #75 precedence preserved. Framework-mode checks implemented; generic namespace restriction subsequently corrected in final review |
 | 2 HTTP/security | foundation authorization declarations, web registration/routing/server/lib, security policy re-exports; RouterOptions and options-based APIs | Web-only requests, limits/JSON/errors/drain, protected/malformed policies, Basic auth and no-verifier negatives tested; no runtime reflection or replacement DI |
 | 3 Actuator | optional web dependency, operational_router, conditional errors/exports and legacy adapters | Actuator-only and integrated tests; real health/live/ready/auth/collision/readiness-failure tests; legacy DOWN and graph-scoped fallible semantics retained |
 | 4 JWT/JWKS | security feature manifest, authentication/config/jwt/jwks stubs, feature tests | Basic/static bearer exclude verifier/client; local jwt excludes reqwest; JWT/JWKS tests retain signature/claims/rotation/cache/timeouts. Local issuer restrictions require no remote client |
@@ -37,7 +39,7 @@ cannot enforce. Typed graph generation and ownership remain compile-time Rust.
 | 7 Macros/graph | macro main/controller/routes gates, renderer core/resources versus selected HTTP items, build fixtures explicit standard, async example manifest | Actual generated consumers pass; no-web main/controller compiler diagnostics; existing graph compile-fail/pass and #74 provider fixtures; no caller-feature cfg guessing |
 | 8 CLI | cli/generator/templates/commands/tests, explicit minimal web manifests, validated --features, matching registry version | All four kinds compile/run, seven optional selections compile, no enabled missing capability, no embedded credentials; generation/filesystem safety retained |
 | 9 External/live | consumers.py, negative.py, original downstream inspected and temporary migrated copy | Real TCP JSON/auth/signatures/actuator/BootUI, SIGTERM and cleanup, no-HTTP scheduler; negative feature unions. Original downstream unchanged |
-| 10 CI | ci.yml independent consumer matrix, MSRV and stable, source prefetch, negative regressions, existing workspace checks | Workflow parses and commands exercised locally. Declared MSRV 1.99.1 retained. Verified target Linux x86_64; hosted execution requires a later push and was not triggered |
+| 10 CI | ci.yml independent consumer matrix, MSRV and stable, source prefetch, negative regressions, existing workspace checks | Workflow parses and commands exercised locally. Declared MSRV 1.99.1 retained. Verified target Linux x86_64; hosted execution was not verified in that local implementation session; branch is now pushed |
 | 11 Release | both publish arrays, publish-order checker, package-check staging script, publishing docs | Correct DAG including build before macros; twelve normalized packages verify against local directory registry source; version-only web/standard consumers pass. No actual crates.io propagation/upload claimed |
 
 ## Security review and negative guarantees
@@ -196,7 +198,7 @@ public version 1.0 and actual publication remain outside this implementation.
 
 Each final collector completed with the same source fingerprint, unchanged workspace lock, and no new external package versions relative to the archived baseline. Minimal selection removes unused dependencies. Before/after samples use the same profile/hardware/toolchain but have uncontrolled host/cache/load differences; no speed ratio, statistical memory reduction or startup benefit is claimed.
 
-## Final acceptance table
+## Historical initial acceptance table (superseded)
 
 | Criterion | Status |
 | --- | --- |
@@ -224,7 +226,9 @@ Each final collector completed with the same source fingerprint, unchanged works
 | Required documentation updated | PASS |
 | All relevant tests pass | PASS |
 
-**COMPLETE:** All requested local implementation and acceptance checks pass. This does not mean merged, published, hosted CI executed, or issue closed.
+The original local checklist above was superseded by independent review, which
+found authorization bypasses. It is not a current completion or merge-readiness
+claim. See [final review](final-review.md) for fresh results and remaining defects.
 
 ## Exact required commands and final outcomes
 

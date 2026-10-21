@@ -49,6 +49,7 @@ def project(out, name, features, protected=False, unified=False, entrypoint=True
     if unified:
         manifest += dependency('scafra-config', ['security', 'actuator', 'scheduler'])
         manifest += dependency('scafra-web', ['security', 'actuator'])
+        manifest += dependency('scafra-security', ['jwks'])
         # Require the unified subcrate fields at compile time. The facade's own
         # feature mask must still refuse to configure these capabilities.
         body = 'let _ = scafra_web::RouterOptions { security: Default::default(), actuator: Default::default(), request_timeout: None };'
@@ -143,8 +144,6 @@ def main():
     out, target = args.output.resolve(), args.target_dir.resolve()
     if out == ROOT or ROOT in out.parents or target == ROOT or ROOT in target.parents:
         parser.error('output and target directories must be outside the checkout')
-    if Path('/var/tmp') not in target.parents:
-        parser.error('Cargo target directory must be under /var/tmp')
     out.mkdir(parents=True, exist_ok=False)
     env = os.environ.copy()
     env['CARGO_TARGET_DIR'] = str(target)
@@ -197,6 +196,54 @@ def main():
         return {'compiler': result, 'runtime': runtime}
     record('protected-route-fails-closed', protected)
 
+    def supplied_router():
+        path = project(out, 'supplied-protected-router', ['web'], entrypoint=False)
+        (path / 'src/main.rs').write_text('''use scafra::prelude::*;
+#[controller("/probe", authenticated)]
+pub struct Probe;
+#[routes]
+impl Probe { #[get("/")] pub async fn get(&self) -> &'static str { "private" } }
+fn main() {
+ let runtime = scafra::__private::tokio::runtime::Runtime::new().unwrap();
+ let router = Probe::register_routes_with(scafra::web::axum::Router::new(), Probe);
+ if let Err(error) = runtime.block_on(scafra::run_with_router(|_| Ok(router))) {
+  eprintln!("{error}"); std::process::exit(1);
+ }
+}
+''')
+        result, _ = build(path, env, args.timeout)
+        assert result['exit_code'] == 0, 'supplied protected router failed compilation; see build.log'
+        runtime = rejected_process(path, target / 'debug/arch103-supplied-protected-router', '',
+                                   'runtime', 'protected routes require the security Cargo feature', env, False)
+        return {'compiler': result, 'runtime': runtime}
+    record('supplied-router-protection-fails-closed', supplied_router)
+
+    def router_owner_boundary(method, features, arguments):
+        path = project(out, 'managed-owner-' + method.replace('_', '-'), features)
+        resource = path / 'src/main/beans/resource.rs'
+        source = resource.read_text()
+        resource.unlink()
+        (path / 'src/main.rs').write_text(
+            '#[scafra::main]\nasync fn main() { let graph = __scafra_graph::compose_async().await.unwrap(); '
+            f'let _ = graph.{method}({arguments}); }}\n')
+        passed, pass_log = build(path, env, args.timeout, check=True)
+        (path / 'without-managed-resources.log').write_text(pass_log)
+        assert passed['exit_code'] == 0, 'router-only helper failed without resources; see without-managed-resources.log'
+        resource.write_text(source)
+        # Directory discovery is performed by the macro; invalidate its caller
+        # when adding a previously undiscovered provider file.
+        main = path / 'src/main.rs'
+        main.write_text(main.read_text() + '\n')
+        rejected, log = build(path, env, args.timeout, check=True)
+        assert rejected['exit_code'] != 0, 'router-only helper compiled with managed resources'
+        assert f'no method named `{method}`' in log, 'unexpected compiler failure; see build.log'
+        return {'without_resources': passed, 'with_resources': rejected,
+                'expected_diagnostic': f'no method named `{method}`'}
+    record('managed-resources-require-options-owner', lambda: router_owner_boundary(
+        'build_router_with_options', ['web'], '&Default::default()'))
+    record('managed-resources-require-compatibility-owner', lambda: router_owner_boundary(
+        'build_router', ['standard'], '&Default::default(), &Default::default(), None'))
+
     def unified():
         path = project(out, 'unified-subcrates', ['web'], unified=True)
         result, _ = build(path, env, args.timeout)
@@ -204,7 +251,9 @@ def main():
         scenarios = {}
         for module, configuration in [('security', 'security:\n  enabled: true\n  bearer_token: test-token\n'),
                                       ('actuator', 'actuator:\n  endpoints: [health]\n'),
-                                      ('scheduler', 'scheduler:\n  enabled: true\n')]:
+                                      ('scheduler', 'scheduler:\n  enabled: true\n'),
+                                      ('jwt', 'security:\n  jwt:\n    enabled: true\n    secret: test-signing-secret\n'),
+                                      ('jwks', 'security:\n  jwt:\n    enabled: true\n    jwk_set_uri: http://127.0.0.1:1/keys\n')]:
             try:
                 scenarios[module] = rejected_process(path, target / 'debug/arch103-unified-subcrates',
                                                      configuration, module, 'module is unavailable', env, False)
@@ -214,6 +263,16 @@ def main():
         assert not any('error' in scenario for scenario in scenarios.values()), 'capability rejection failed; see scenarios.json and runtime logs'
         return {'compiler': result, 'scenarios': scenarios}
     record('unified-subcrate-capabilities-stay-rejected', unified)
+
+    def unified_jwt():
+        path = project(out, 'security-with-unified-jwks', ['security'], protected=True, unified=True)
+        result, _ = build(path, env, args.timeout)
+        assert result['exit_code'] == 0, 'unified JWT application failed compilation; see build.log'
+        runtime = rejected_process(path, target / 'debug/arch103-security-with-unified-jwks',
+                                   'security:\n  enabled: true\n  jwt:\n    enabled: true\n    secret: test-signing-secret\n',
+                                   'jwt', 'module is unavailable', env, False)
+        return {'compiler': result, 'runtime': runtime}
+    record('unified-jwks-cannot-enable-facade-jwt', unified_jwt)
 
     def additive():
         path = out / 'additive-union'

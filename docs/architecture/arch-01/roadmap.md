@@ -220,7 +220,7 @@ publishing or changes to the downstream repository during Phase 0.
   contributing/release docs. Workspace all-features masks unified features.
 - **Implementation:** separate external cases for default/minimal/web/secure web/
   actuator/scheduler/standard/all, targeted runtime negatives and fmt/lint/tests.
-  Pin declared MSRV 1.99.1 plus stable; approve any extra targets explicitly.
+  Pin reviewed MSRV 1.88.0 plus stable; approve any extra targets explicitly.
   Cache by target/toolchain/lock/feature selection while keeping app roots
   isolated. Retain workspace integration checks.
 - **Depends on:** 9 and approved toolchain/target policy.

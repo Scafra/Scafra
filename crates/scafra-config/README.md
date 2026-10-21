@@ -22,15 +22,24 @@ needed. Public integration fields and re-exports require their corresponding
 features. `BootUiConfig` remains available as a data-only model without the
 BootUI feature; the feature selects its aggregate field and namespace.
 
-The loader reserves `server`, `logging`, `startup`, `security`, `actuator`,
-`scheduler`, `bootui`, and `scafra` namespaces, including when loading custom
-properties. Other application namespaces remain allowed. Selected YAML and
-properties inputs are checked **before merging**, including profile inputs.
-An explicitly configured unavailable module is an error even if its section is
-empty, null, or disabled, or later overwritten. Unknown keys within framework
-namespaces are errors. Environment variables and explicit override paths are
-checked against the same reserved contract. This prevents a missing module or
-misspelled policy from silently dropping security requirements.
+Generic `load_yaml<T>()`, `ConfigLoader::load<T>()`, and domain `Properties<T>`
+use the application's typed schema. Domain settings may own fields named
+`security` or `server`; these names do not imply Scafra integrations.
+
+Use `load_validated::<ScafraConfig>()` (or its profile-returning counterpart)
+for framework application settings. `ScafraConfig` opts into strict source checks
+through the defaulted `Config::FRAMEWORK_CONFIGURATION` contract. Custom composed
+framework settings can opt in too. For raw loading, `.framework()` explicitly
+selects the same checks; `.capabilities(...)` also selects them. The standard
+runner always selects framework validation and narrows the capabilities.
+
+In framework mode, `server`, `logging`, `startup`, `security`, `actuator`,
+`scheduler`, `bootui`, and `scafra` are reserved. Selected YAML/properties inputs
+are checked **before merging**, including profile inputs. An explicitly
+configured unavailable module is an error even if empty, null, disabled, or later
+overwritten. Unknown framework keys, environment variables and override paths
+are checked against the same contract. Generic raw loading is a deserialization
+API, not a substitute for validated framework startup.
 
 Module adapters provide feature-gated schema information for deserialization-only
 secret fields and dynamic task entries. Generic environment path resolution still

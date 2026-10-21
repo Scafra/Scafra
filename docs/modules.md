@@ -66,13 +66,20 @@ without integrations. Precedence remains defaults → base files → profile fil
 → environment → explicit overrides. Generic properties retain #78's prefixed,
 explicit double-underscore and unambiguous legacy environment names.
 
-Framework root namespaces (`server`, `logging`, `startup`, `security`, `actuator`,
-`scheduler`, `bootui`, `scafra`) are reserved. Unknown framework fields and
-explicitly configured unavailable sections fail even if `enabled: false` or a
-later override would erase the section. Custom application namespaces remain
-valid. This applies to selected files/profiles, environment and explicit
-loader overrides. Integration-specific environment schema adapters are compiled
-only with their corresponding config features; there is still one parser.
+Generic `load_yaml<T>()`, `ConfigLoader::load<T>()`, and domain `Properties<T>`
+follow the application's schema, including domain fields named `security` or
+`server`. They do not reserve framework namespaces.
+
+`load_validated::<ScafraConfig>()` and its profile variant automatically enable
+framework checks through `Config::FRAMEWORK_CONFIGURATION`. `.framework()`
+selects them explicitly for raw loading; `.capabilities(...)` also selects them.
+In this mode framework root namespaces (`server`, `logging`, `startup`,
+`security`, `actuator`, `scheduler`, `bootui`, `scafra`) are reserved. Unknown
+framework fields and unavailable sections fail even if `enabled: false` or a
+later override would erase them. Checks apply to selected files/profiles,
+environment and explicit overrides before merging. Custom application namespaces
+remain valid. There is still one parser. Use validated loading for application
+startup; raw deserialization alone does not enforce the framework policy.
 
 The standard runner narrows `ConfigLoader` using `ConfigCapabilities` derived
 from **its own selected facade features**. This matters when another dependency
@@ -91,6 +98,26 @@ key/discovery intent. Verification failure never falls back to Basic/static
 bearer. Signature/algorithm/issuer/audience/cache checks remain implemented by
 the existing verifier. Startup diagnostics are bounded and print safe fixed
 hints even before logging initialization; they do not dump arbitrary payloads.
+
+Policy matching retains inherited declarations and selects the most specific
+path before choosing a method, including explicit HEAD versus implicit GET.
+A public parameter route cannot authorize a static handler.
+
+Low-level `ControllerRoutes::register_routes*` adapters only install handlers.
+When composing directly, supply complete, unchanged controller metadata to
+`finish_router_with_options`; arbitrary handwritten Axum routes have no inferred
+controller policy. Scafra's server also finalizes supplied routers against all
+linked controller registrations before bind. This is conservative: an unused
+linked protected controller can reject startup, and already-finalized routers
+receive a second middleware layer (including a separate JWKS cache).
+
+**Unsupported composition:** applying Axum prefix/path transformations to a
+registered controller router does not transform its static authorization
+metadata. Do not rely on Scafra role/scope declarations after `.nest()` or similar
+rewrites; use generated graph composition with the declared controller prefix.
+Caller-supplied incomplete metadata and arbitrary router transforms cannot be
+validated by inspecting an opaque Axum Router. This is an open limitation for
+broader manual-composition support, recorded in the [review](architecture/arch-01/final-review.md).
 
 Actuator remains independent of application security. Empty endpoint selection
 adds no endpoints. Its own bearer policy is enforced when selected; global
@@ -174,8 +201,10 @@ python3 scripts/arch103-package-check.py /var/tmp/scafra-packages-NEW --offline
 Each consumer resolves independently outside the workspace. Tests cover normal
 package absence, real loopback JSON/auth/readiness, SIGTERM, resource cleanup,
 HTTP-free scheduler drain, missing features and Cargo feature union. CI retains
-workspace checks and runs the isolated MSRV matrix. The declared MSRV remains
-1.99.1. Verified target policy is Linux x86_64; additional targets require their
+workspace checks and runs the isolated MSRV matrix. The declared MSRV is Rust 1.88 (verified with 1.88.0 against the retained
+lockfile). The earlier 1.99.1 declaration predated #103; historical 1.82 source
+compatibility requires an independently downresolved lock and is not the current
+dependency support contract. Verified target policy is Linux x86_64; additional targets require their
 own checks before a support claim. Package staging verifies normalized archives
 against a local directory registry source. Actual crates.io propagation and
 credentials remain release operations, not something this task performs.

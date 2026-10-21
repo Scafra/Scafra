@@ -31,3 +31,6 @@ configuration, optional web/security/actuator/JWT/JWKS/scheduler/BootUI, facade,
 generator, CI and packaging work is now in the working tree. The implementation
 report records final acceptance results and release-operation limitations.
 No branches, commits, PRs, uploads or issue closure were created.
+
+Independent corrective review of the committed/pushed implementation: [final review](final-review.md).
+Historical implementation checklists do not supersede its findings.

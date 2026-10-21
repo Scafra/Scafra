@@ -21,6 +21,8 @@ const SCAFRA_ENV_CONTROLS: [&str; 5] = [
     "DEV_CHILD",
     "DEV_RELOAD",
 ];
+/// Deserializes a domain YAML document without reserving framework namespaces.
+/// For framework startup use `ConfigLoader::load_validated::<ScafraConfig>()`.
 pub fn load_yaml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, ConfigError> {
     let path = path.as_ref();
     let display_path = path.display().to_string();
@@ -29,8 +31,6 @@ pub fn load_yaml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, Confi
         source,
     })?;
     let value = parse_yaml(&display_path, &source)?;
-    validate_framework_input(&value, ConfigCapabilities::default())?;
-    validate_resolved_capabilities(&value, ConfigCapabilities::default())?;
     serde_yaml::from_value(value).map_err(|_| ConfigError::Decode {
         location: format!(" from `{display_path}`"),
     })
@@ -39,6 +39,11 @@ pub fn load_yaml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, Confi
 /// A typed configuration value can provide its own validation before startup.
 pub trait Config: Sized {
     type Error: std::error::Error + Send + Sync + 'static;
+
+    /// Selects Scafra namespace/capability checks for framework-owned settings.
+    /// Domain configuration retains its own schema, including `security` and
+    /// `server` fields. The standard application configuration opts in.
+    const FRAMEWORK_CONFIGURATION: bool = false;
 
     fn validate(&self) -> Result<(), Self::Error>;
 
@@ -151,6 +156,7 @@ pub struct ConfigLoader {
     env_prefix: String,
     overrides: BTreeMap<String, String>,
     capabilities: ConfigCapabilities,
+    framework_configuration: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -177,6 +183,7 @@ impl Default for ConfigLoader {
             env_prefix: "SCAFRA".to_owned(),
             overrides: BTreeMap::new(),
             capabilities: ConfigCapabilities::default(),
+            framework_configuration: false,
         }
     }
 }
@@ -186,12 +193,22 @@ impl ConfigLoader {
         Self::default()
     }
 
+    /// Enables strict validation of Scafra-owned namespaces in every selected
+    /// input before merging. Use this for application configuration; generic
+    /// domain settings do not reserve any Scafra field names.
+    pub fn framework(mut self) -> Self {
+        self.framework_configuration = true;
+        self
+    }
+
     /// Narrows the optional capabilities accepted by this loader.
+    /// Also selects framework namespace validation.
     ///
     /// This is independent of Cargo feature unification and can never enable
     /// a capability unavailable in the compiled configuration crate. Repeated
     /// calls only narrow the existing mask.
     pub fn capabilities(mut self, capabilities: ConfigCapabilities) -> Self {
+        self.framework_configuration = true;
         self.capabilities = self.capabilities.intersect(capabilities);
         self
     }
@@ -245,6 +262,8 @@ impl ConfigLoader {
             .unwrap_or_else(|| "default".to_owned()))
     }
 
+    /// Loads a domain value using its typed schema. Select `.framework()` for
+    /// strict framework namespaces, or use validated `ScafraConfig` loading.
     pub fn load<T>(&self) -> Result<T, ConfigError>
     where
         T: DeserializeOwned + Serialize + Default,
@@ -269,7 +288,9 @@ impl ConfigLoader {
         T: ConfigProperties + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let (merged, origins, _) = self.load_merged::<T>(T::CONFIG_PREFIX)?;
+        let mut loader = self.clone();
+        loader.framework_configuration |= T::FRAMEWORK_CONFIGURATION;
+        let (merged, origins, _) = loader.load_merged::<T>(T::CONFIG_PREFIX)?;
         let value = if T::CONFIG_PREFIX.is_empty() {
             merged
         } else {
@@ -329,7 +350,9 @@ impl ConfigLoader {
 
         self.merge_environment(&mut merged, &schema, &mut origins)?;
         for (path, value) in &self.overrides {
-            validate_framework_path(path, self.capabilities)?;
+            if self.framework_configuration {
+                validate_framework_path(path, self.capabilities)?;
+            }
             set_path(
                 &mut merged,
                 path,
@@ -340,7 +363,9 @@ impl ConfigLoader {
             )?;
         }
 
-        validate_resolved_capabilities(&merged, self.capabilities)?;
+        if self.framework_configuration {
+            validate_resolved_capabilities(&merged, self.capabilities)?;
+        }
         Ok((merged, origins, profile))
     }
 
@@ -460,7 +485,9 @@ impl ConfigLoader {
         T: Config + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let config = self.load::<T>()?;
+        let mut loader = self.clone();
+        loader.framework_configuration |= T::FRAMEWORK_CONFIGURATION;
+        let config = loader.load::<T>()?;
         config
             .validate()
             .map_err(|error| validation_config_error::<T>(&error))?;
@@ -474,7 +501,9 @@ impl ConfigLoader {
         T: Config + DeserializeOwned + Serialize + Default,
         T::Error: std::fmt::Display,
     {
-        let (config, profile) = self.load_with_profile::<T>()?;
+        let mut loader = self.clone();
+        loader.framework_configuration |= T::FRAMEWORK_CONFIGURATION;
+        let (config, profile) = loader.load_with_profile::<T>()?;
         config
             .validate()
             .map_err(|error| validation_config_error::<T>(&error))?;
@@ -506,11 +535,15 @@ impl ConfigLoader {
         if path.extension().and_then(|extension| extension.to_str()) == Some("properties") {
             let mut input = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
             merge_properties(&mut input, &mut BTreeMap::new(), &display_path, &source)?;
-            validate_framework_input(&input, self.capabilities)?;
+            if self.framework_configuration {
+                validate_framework_input(&input, self.capabilities)?;
+            }
             merge_properties(target, origins, &display_path, &source)
         } else {
             let value = parse_yaml(&display_path, &source)?;
-            validate_framework_input(&value, self.capabilities)?;
+            if self.framework_configuration {
+                validate_framework_input(&value, self.capabilities)?;
+            }
             merge_yaml(target, value, "", &display_path, origins)
         }
     }
@@ -543,11 +576,15 @@ impl ConfigLoader {
             // though their fields are intentionally absent from the schema.
             let lower = raw_path.to_ascii_lowercase();
             for namespace in ["security", "actuator", "scheduler", "bootui"] {
-                if lower == namespace || lower.starts_with(&format!("{namespace}_")) {
+                if self.framework_configuration
+                    && (lower == namespace || lower.starts_with(&format!("{namespace}_")))
+                {
                     validate_framework_path(namespace, self.capabilities)?;
                 }
             }
-            if lower.starts_with("security_jwt_") || lower.starts_with("security__jwt__") {
+            if self.framework_configuration
+                && (lower.starts_with("security_jwt_") || lower.starts_with("security__jwt__"))
+            {
                 validate_framework_path("security.jwt", self.capabilities)?;
             }
             let path = resolve_environment_path(schema, raw_path).map_err(|()| {
@@ -565,7 +602,9 @@ impl ConfigLoader {
                     source_kind: "environment".to_owned(),
                 });
             }
-            validate_framework_path(&path, self.capabilities)?;
+            if self.framework_configuration {
+                validate_framework_path(&path, self.capabilities)?;
+            }
             let value = value.into_string().map_err(|_| ConfigError::InvalidValue {
                 path: path.clone(),
                 source_kind: "environment".to_owned(),
@@ -860,8 +899,8 @@ fn validation_config_error<T: Config>(error: &T::Error) -> ConfigError {
     }
 }
 
-/// Framework-owned namespaces are reserved for every loader, including typed
-/// application properties. Validate each selected input before merging so an
+/// Framework-owned namespaces are reserved when framework validation is selected.
+/// Validate each selected input before merging so an
 /// override cannot erase an unavailable security policy.
 fn validate_framework_input(
     input: &serde_yaml::Value,

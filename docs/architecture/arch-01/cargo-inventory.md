@@ -1,9 +1,9 @@
-# Current Cargo dependency inventory
+# Phase 0 Cargo dependency inventory
 
 > Historical Phase 0 snapshot/planning evidence. The [implemented contract](../../modules.md)
 > and [implementation results](implementation.md) supersede proposed/current-state claims below.
 
-Generated from `cargo metadata --format-version 1 --locked` at `e041fc27c46e521e848ecbd3895d85b876c9b831`. This is the current manifest contract, not the proposed feature API. All twelve crates currently declare no Cargo features and no build-dependencies. A procedural macro's normal dependencies run on the compiler host; they are not application runtime libraries. Target-specific normal edges are retained below. Version requirements are from metadata, resolved versions are in the baseline trees.
+Generated from `cargo metadata --format-version 1 --locked` at `e041fc27c46e521e848ecbd3895d85b876c9b831`. This records the manifest contract at that audited commit. At that time all twelve crates declared no Cargo features and no build-dependencies; it does not describe the implemented feature API. A procedural macro's normal dependencies run on the compiler host; they are not application runtime libraries. Target-specific normal edges are retained below. Version requirements are from metadata, resolved versions are in the baseline trees.
 
 | Crate | Direct normal | Build | Dev | Direct Scafra normal dependencies |
 | --- | ---: | ---: | ---: | --- |

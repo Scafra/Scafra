@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: ["1.99.1"]
+        rust: ["1.88.0"]
         case: [minimal, default, config, core, web, secure-web, jwt, jwks, actuator, scheduler, bootui, standard, all]
         include:
           - rust: stable

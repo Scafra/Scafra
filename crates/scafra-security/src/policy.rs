@@ -44,7 +44,6 @@ impl RoutePolicyMatcher {
     pub(super) fn new(policies: Vec<RouteAuthorizationMetadata>) -> Self {
         let policies = policies
             .into_iter()
-            .filter(|metadata| !is_inert(metadata) || metadata.method.eq_ignore_ascii_case("HEAD"))
             .map(|metadata| {
                 let path = join_paths(metadata.prefix, metadata.path);
                 let specificity = path_specificity(&path);
@@ -84,8 +83,20 @@ pub(super) fn matching_policy(
     method: &Method,
     path: &str,
 ) -> Option<ResolvedPolicy> {
+    // Axum chooses the path before the method (including explicit HEAD and
+    // implicit GET->HEAD). A less-specific public route must never authorize
+    // the handler, or method fallback, at a more-specific protected path.
+    let specificity = matcher
+        .policies
+        .iter()
+        .filter(|candidate| route_path_matches(&candidate.path, path))
+        .map(|candidate| &candidate.specificity)
+        .max()?;
+    let selected = |candidate: &&PreparedRoutePolicy| {
+        &candidate.specificity == specificity && route_path_matches(&candidate.path, path)
+    };
     let explicit_head = method == Method::HEAD
-        && matcher.policies.iter().any(|candidate| {
+        && matcher.policies.iter().filter(selected).any(|candidate| {
             candidate.metadata.method.eq_ignore_ascii_case("HEAD")
                 && route_path_matches(&candidate.path, path)
         });
@@ -97,11 +108,7 @@ pub(super) fn matching_policy(
 
     let mut method_match: Option<&PreparedRoutePolicy> = None;
     let mut protected_fallback: Option<(ResolvedPolicy, (usize, usize))> = None;
-    for candidate in &matcher.policies {
-        if !route_path_matches(&candidate.path, path) {
-            continue;
-        }
-
+    for candidate in matcher.policies.iter().filter(selected) {
         if candidate.metadata.method.eq_ignore_ascii_case(method)
             && method_match.is_none_or(|current| candidate.specificity >= current.specificity)
         {
@@ -126,17 +133,6 @@ pub(super) fn matching_policy(
     method_match
         .map(|policy| policy.resolved)
         .or_else(|| protected_fallback.map(|(policy, _)| policy))
-}
-
-fn is_inert(metadata: &RouteAuthorizationMetadata) -> bool {
-    let controller = metadata.controller_policy;
-    let route = metadata.route_policy;
-    controller.mode == AuthorizationMode::Inherit
-        && route.mode == AuthorizationMode::Inherit
-        && controller.role_groups.is_empty()
-        && controller.required_scopes.is_empty()
-        && route.role_groups.is_empty()
-        && route.required_scopes.is_empty()
 }
 
 fn resolve_policy(metadata: &RouteAuthorizationMetadata) -> ResolvedPolicy {

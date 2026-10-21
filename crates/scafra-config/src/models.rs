@@ -112,6 +112,8 @@ pub struct ScafraConfig {
 impl Config for ScafraConfig {
     type Error = ValidationError;
 
+    const FRAMEWORK_CONFIGURATION: bool = true;
+
     fn validate(&self) -> Result<(), Self::Error> {
         if self.server.host.trim().is_empty() {
             return Err(ValidationError {

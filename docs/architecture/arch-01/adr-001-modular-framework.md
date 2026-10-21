@@ -3,7 +3,8 @@
 Status: **Implemented under the user's full implementation authorization; awaiting normal maintainer code review.**
 Issue [#103](https://github.com/Scafra/Scafra/issues/103), target 1.0 Stable Core.
 Phase 0 source evidence is based on `e041fc27c46e521e848ecbd3895d85b876c9b831`;
-the subsequent implementation is uncommitted on the same branch. The final
+the implementation was committed and pushed as `35b267168ec08a8b42fb3053b86dc2f38ce937b5`.
+Independent corrective review is recorded in [final review](final-review.md). The final
 contract and migration are in [modules](../../modules.md), with actual tests and
 measurements in [implementation results](implementation.md).
 
@@ -20,6 +21,10 @@ measurements in [implementation results](implementation.md).
 - Compile integration-specific environment schema adapters only with the owning
   config features. Keep one parser and existing Config/Properties trait methods;
   a new general schema registration API is unnecessary for this feature contract.
+- Generic YAML/typed loading does not reserve framework field names. Strict
+  checks are selected by `.framework()`, `.capabilities(...)`, or automatically
+  by validated `ScafraConfig` loading via defaulted `Config::FRAMEWORK_CONFIGURATION`.
+  The standard runner always uses this checked path.
 - Add explicit ConfigCapabilities narrowing to the loader and standard runner.
   Cargo may unify a dependency's extra features without selecting facade runtime
   integrations. The runner's own capabilities must therefore reject unavailable
@@ -35,7 +40,8 @@ measurements in [implementation results](implementation.md).
 
 The original alternatives and rationale follow. Proposal wording records design
 history; the decisions above and module reference describe implemented behavior.
-No commit, publish, merge, PR or issue closure is part of this task.
+The implementation is committed and pushed; corrective review changes remain
+uncommitted. No merge, publication or issue closure is asserted.
 
 ## Context and problem
 

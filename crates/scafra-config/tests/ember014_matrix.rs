@@ -352,7 +352,7 @@ fn ambiguous_and_unknown_environment_names_fail_deterministically() {
         Err(ConfigError::InvalidValue {
             path,
             source_kind
-        }) if path == "server.unknown_field" && source_kind == "unknown framework configuration field"
+        }) if path == "server_unknown_field" && source_kind == "environment variable name"
     ));
 }
 

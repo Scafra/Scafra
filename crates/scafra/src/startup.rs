@@ -24,6 +24,10 @@ pub async fn run() -> std::result::Result<(), StartupError> {
 /// Starts Scafra with a router composed from the application's typed graph.
 /// The builder runs after validated configuration loads and before lifecycle
 /// startup, so providers can use configured values without global state.
+/// The server finalizes linked controller policies before binding, even when
+/// the supplied router was assembled using low-level registration adapters.
+/// Preserve declared controller prefixes; arbitrary Axum nesting/path rewrites
+/// do not rewrite static role/scope metadata.
 pub async fn run_with_router<F>(build_router: F) -> std::result::Result<(), StartupError>
 where
     F: FnOnce(&ScafraConfig) -> std::result::Result<axum::Router, StartupError>,

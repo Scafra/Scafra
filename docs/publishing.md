@@ -96,7 +96,7 @@ publication. The workflow runs this check before package enumeration.
 
 CI retains workspace all-feature checks and separately runs isolated external
 consumers for minimal/default facade, direct config/core, web, secure-web, JWT,
-JWKS, actuator, scheduler, standard, and all features. The consumer matrix uses the declared MSRV (1.99.1), plus a
+JWKS, actuator, scheduler, standard, and all features. The consumer matrix uses the declared MSRV (1.88.0), plus a
 stable minimal build. Each invocation uses one consumer selection to avoid
 workspace feature unification masking missing APIs or unwanted dependencies.
 The consumer script checks normal dependency isolation and exercises startup

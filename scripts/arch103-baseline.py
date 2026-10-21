@@ -199,6 +199,8 @@ def main():
                                         if line.startswith(("VmRSS:", "VmHWM:"))]
                 child.send_signal(signal.SIGTERM)
                 sample["shutdown_exit_code"] = child.wait(timeout=15)
+                if sample["shutdown_exit_code"] != 0:
+                    raise RuntimeError(f"runtime {scenario} shutdown failed: see log")
                 runtime_results.append(sample)
             finally:
                 if child.poll() is None:

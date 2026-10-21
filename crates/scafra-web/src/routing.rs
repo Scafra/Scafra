@@ -58,12 +58,34 @@ pub fn build_router_with_options(options: &RouterOptions) -> Result<Router, WebE
 }
 
 /// Validates route protection even when the security implementation is absent.
+///
+/// `routes` must describe every framework controller installed in `router`,
+/// using unchanged declared prefixes/paths. This API cannot infer metadata for
+/// arbitrary Axum routes or transform it after nesting/path rewrites.
 pub fn finish_router_with_options(
     router: Router,
     routes: &[crate::registration::RouteMetadata],
     options: &RouterOptions,
 ) -> Result<Router, WebError> {
     validate_routes_with_options(routes, options)?;
+    apply_middleware(router, routes, options)
+}
+
+// An opaque supplied Axum router already resolves installed route collisions.
+// Linked registrations can include unused adapters, so only validate/enforce
+// their authorization here rather than treating them as installed route pairs.
+pub(crate) fn finish_supplied_router(
+    router: Router,
+    options: &RouterOptions,
+) -> Result<Router, WebError> {
+    apply_middleware(router, &default_controller_metadata(&[]), options)
+}
+
+fn apply_middleware(
+    router: Router,
+    routes: &[crate::registration::RouteMetadata],
+    options: &RouterOptions,
+) -> Result<Router, WebError> {
     let policies = authorization_metadata_for(routes);
     validate_authorization_metadata(&policies)?;
     #[cfg(feature = "security")]

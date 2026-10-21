@@ -465,7 +465,12 @@ where
         )))
     })?;
     let router = match supplied_router {
-        Some(router) => router,
+        // Supplied routers may contain generated controllers registered through
+        // their low-level adapters. Never assume the caller already installed
+        // enforcement. Check all linked controller declarations before binding.
+        Some(router) => {
+            crate::routing::finish_supplied_router(router, &options).map_err(ServerError::from)?
+        }
         None => crate::routing::build_router_with_options(&options).map_err(ServerError::from)?,
     };
     scafra_foundation::startup!("application routes built");

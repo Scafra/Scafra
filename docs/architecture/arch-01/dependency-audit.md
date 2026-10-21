@@ -159,8 +159,9 @@ claim this supervisor is the worker runner from #49 or graceful resource shutdow
 on reload. Existing generated-project tests build external fixtures; runtime
 all-shapes smoke is explicitly ignored by default.
 
-CI currently tests workspace all-features only, stable toolchain, Linux; the
-declared MSRV is **1.99.1**. No approved extra target support is inferred.
+At the Phase 0 audited commit, CI tested workspace all-features only, stable
+toolchain, Linux; the recorded MSRV declaration was **1.99.1**. The independent
+review lowers the supported declaration to 1.88; see [final review](final-review.md). No approved extra target support is inferred.
 Follow-up CI adds selected-feature external processes and pinned MSRV checks.
 Current package verification uses `cargo package --list`, which lists files and
 does not establish registry buildability. Both package arrays in publish.yml

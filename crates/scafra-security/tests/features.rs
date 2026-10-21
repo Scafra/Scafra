@@ -318,3 +318,76 @@ async fn contradictory_public_requirements_do_not_disable_enforcement() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn static_paths_take_precedence_over_public_parameter_policies() {
+    use axum::routing::head;
+    let record = |method, path, route_policy| RouteAuthorizationMetadata {
+        controller: "manual",
+        method,
+        prefix: "",
+        path,
+        controller_policy: AuthorizationPolicy::inherit(),
+        route_policy,
+    };
+    for (method, static_policy, parameter_is_head) in [
+        ("GET", AuthorizationPolicy::inherit(), false),
+        ("HEAD", AuthorizationPolicy::protected(), true),
+    ] {
+        let parameter = if parameter_is_head {
+            head(|| async { "public parameter" })
+        } else {
+            get(|| async { "public parameter" })
+        };
+        let router = layer_with_route_policies(
+            Router::new()
+                .route("/users/me", get(|| async { "private static" }))
+                .route("/users/{id}", parameter),
+            SecurityConfig {
+                enabled: true,
+                bearer_token: Some("token".into()),
+                ..Default::default()
+            },
+            vec![
+                record("GET", "/users/me", static_policy),
+                record(
+                    if parameter_is_head { "HEAD" } else { "GET" },
+                    "/users/{id}",
+                    AuthorizationPolicy::public(),
+                ),
+            ],
+        );
+        for (uri, expected) in [
+            ("/users/me", StatusCode::UNAUTHORIZED),
+            ("/users/other", StatusCode::OK),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected, "{method} {uri}");
+        }
+        assert_eq!(
+            router
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/users/me")
+                        .header("authorization", "Bearer token")
+                        .body(Body::empty())
+                        .unwrap()
+                )
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+    }
+}
