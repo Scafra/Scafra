@@ -67,7 +67,10 @@ There is no supervised worker entrypoint yet.
   real credentials explicitly. Removing a capability must produce an error for
   protected/configured intent, never a public fallback. Test anonymous, invalid,
   valid, missing-role and missing-scope requests after changing composition.
-- BootUI is separately selected and experimental. Keep effective config/profile
+- BootUI is separately selected and experimental, including `BootUiConfig`,
+  its schema/re-exports and `ScafraConfig.bootui`; opting in can require updates
+  to aggregate struct literals when those experimental fields change. Keep the
+  effective config/profile
   handoff and local-only/peer protections; review allow-listed snapshots. Do not
   assume a stable dashboard JSON schema.
 - CLI starters for web/api/service/monolith select `web`. Use `scafra new app
@@ -83,7 +86,11 @@ There is no supervised worker entrypoint yet.
 3. Update facade and direct companion/build dependencies together to the target
    coordinated release; regenerate emitted Rust and inspect Cargo.lock/tree.
 4. Rebuild with the documented MSRV, currently `cargo +1.88.0 check --locked`,
-   and current stable. Clean consumers must resolve compatible dependencies on
+   and current stable. The proposed policy permits reviewed MSRV increases in
+   1.x minors, never patches: inspect the target release's compiler floor first.
+   To remain on an older compiler, constrain the last compatible Scafra minor
+   and retain a compatible lockfile; no backport guarantee follows.
+   Clean consumers must resolve compatible dependencies on
    the MSRV too; do not assume a workspace lock governs downstream resolution.
 5. Resolve compiler errors using the release migration notes. If a release
    actually marks an API `#[deprecated]`, use its warning and rustdoc replacement
@@ -100,3 +107,14 @@ There is no supervised worker entrypoint yet.
 For prereleases use explicit versions, preferably exact matching versions for
 all Scafra packages. Keep the previous application revision and lockfile for a
 reviewable rollback; rollback must not reintroduce a known security defect.
+
+## Before the 1.0 freeze
+
+Current error mappings and resource protection are implemented behavior, not a
+final universal error/limit design. #12 must settle response/status/schema
+contracts; #19 must settle configurable/raw-body limits, timeout defaults and
+connection/header ownership. A fixed extractor limit does not protect every raw
+body handler. Read their migration notes when completed and retest configuration,
+router construction and error handling. #15/#33/#42 supply published-template,
+compiler/target and RC/upgrade evidence before the final 1.0 inventory is frozen.
+See the [candidate freeze gates](api-stability.md#candidate-freeze-gates-and-classification-exceptions).

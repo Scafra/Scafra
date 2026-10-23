@@ -68,7 +68,8 @@ an explicit maintainer version/scope decision recorded in the PR before merge.
   never make unavailable security intent silently disappear.
 - [ ] Review supported macro input **and generated APIs**, hidden runtime paths,
   dependency lower bounds and version-only external consumer resolution.
-- [ ] Check Rust 1.88 dependency/source compatibility, target-specific behavior
+- [ ] Check the release's declared MSRV (currently Rust 1.88), any proposed
+  minor-release increase/rationale/notice, target-specific behavior
   and existing CI coverage. Record any tooling-only compiler exception.
 - [ ] Preserve authentication/authorization, route composition, operational
   guards, redaction, initialization/rollback and shutdown invariants with

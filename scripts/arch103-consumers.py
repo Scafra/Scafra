@@ -25,6 +25,7 @@ CASES = [
     ("minimal", "scafra", [], OPTIONAL | {"scafra-web", "axum"}),
     ("config", "scafra-config", [], OPTIONAL | {"scafra-web", "axum"}),
     ("core", "scafra-core", [], OPTIONAL | {"scafra-web", "axum"}),
+    ("foundation", "scafra-foundation", [], OPTIONAL | {"scafra-web", "axum"}),
     ("web", "scafra", ["web"], OPTIONAL),
     ("secure-web", "scafra", ["security"], OPTIONAL - {"scafra-security"}),
     ("inventory", "scafra", ["security"], OPTIONAL - {"scafra-security"}),
@@ -219,7 +220,16 @@ def jwt(secret="arch103-signing-secret", roles=(), scope=""):
 def runtime(project, binary, name, env):
     if name == "nested":
         return runtime_nested(project, binary, env)
-    if name in {"minimal", "default", "core", "config", "scheduler"}:
+    if name in {"minimal", "default", "foundation"}:
+        process = subprocess.run([str(binary)], cwd=project, env=dict(env, RUST_LOG="info"),
+                                 text=True, capture_output=True, check=True, timeout=10)
+        output = process.stdout + process.stderr
+        (project / "runtime.log").write_text(output)
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+        assert "scafra::startup" in plain and "STARTUP" in plain, plain
+        assert "request_count=16" in plain and 'label="external"' in plain, plain
+        return {"exit_code": 0, "startup_target": "scafra::startup", "structured_fields": True}
+    if name in {"core", "config", "scheduler"}:
         subprocess.run([str(binary)], cwd=project, env=env, check=True, timeout=10)
         return {"exit_code": 0}
     secure = name in {"secure-web", "inventory", "jwt", "jwks", "standard", "all", "bootui"}
@@ -384,6 +394,9 @@ def main():
         web = name in {"web", "secure-web", "inventory", "jwt", "jwks", "actuator", "standard", "all", "bootui"}
         if dependency == "scafra-config":
             source = 'fn main() { let _ = scafra_config::ConfigLoader::new().env_prefix("ARCH103_UNUSED").load::<scafra_config::ScafraConfig>().unwrap(); }\n'
+        elif dependency == "scafra-foundation":
+            source = ('fn main() { scafra_foundation::init_runtime_logging(&Default::default()); '
+                      'scafra_foundation::startup!(request_count = 16u64, label = "external", "consumer startup"); }\n')
         elif dependency == "scafra-core":
             source = 'fn main() { let mut app = scafra_core::Application::new(Default::default()); app.start().unwrap(); app.shutdown().unwrap(); }\n'
         elif name == "scheduler":
@@ -418,7 +431,7 @@ def main():
             (project / "build.rs").write_text('fn main() { scafra_build::discover_graph("src/main").unwrap(); }\n')
             (project / "src/main").mkdir()
             (project / "src/main/components.rs").write_text(PROPERTIES)
-            source = ('include!(concat!(env!("OUT_DIR"), "/scafra_modules.rs"));\nfn main() { scafra::startup!("external consumer"); '
+            source = ('include!(concat!(env!("OUT_DIR"), "/scafra_modules.rs"));\nfn main() { scafra::foundation::init_runtime_logging(&Default::default()); scafra::startup!(request_count = 16u64, label = "external", "consumer startup"); '
                       'let graph = __scafra_graph::compose().unwrap(); let _ = graph.into_resources(); '
                       'let mail = scafra::Properties::<components::Mail>::with_loader(scafra::ConfigLoader::new().env_prefix("ARCH103_UNUSED").override_value("mail.host", "example.test")).load().unwrap(); assert_eq!(mail.host,"example.test"); }\n')
         (project / "Cargo.toml").write_text(manifest)

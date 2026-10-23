@@ -29,6 +29,8 @@ Axum, Tokio, Tower, Serde, and `tracing`.
 - [Publishing](publishing.md) — configure and trigger a crates.io release.
 - [Contributing](contributing.md) — build the workspace and make a focused
   contribution.
+- [Codex development workflow](development/codex.md) — repository instructions,
+  review skills, agents, execution permissions and verification.
 
 ## Current scope
 

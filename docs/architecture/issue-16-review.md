@@ -1,6 +1,11 @@
 # Issue #16 implementation review
 
-Status: **READY FOR PR REVIEW** — implementation deliverables and local checks
+> The original implementation record below describes policy revision 1 at
+> `264b5c3`. The [Independent Merge Readiness Review](#independent-merge-readiness-review)
+> supersedes its policy recommendations and readiness assessment. Historical
+> command results are retained as history, not reused as current verification.
+
+Historical revision 1 status: **READY FOR PR REVIEW** — implementation deliverables and local checks
 are complete; maintainer approval and hosted CI remain separate.
 Policy revision 1 is **proposed for maintainer approval**, not an assertion that
 1.0.0 has shipped or is ready for production.
@@ -61,7 +66,7 @@ No other repository was modified. Build/test artifacts remain outside Git.
    Possibly-breaking Rust additions need downstream coherence/inference/method
    review. Existing 0.y patches preserve that line (compatible additions allowed),
    breaks use next 0.y. Pre-release labels do not establish stable support.
-7. Proposed MSRV policy preserves Rust 1.88 through 1.x; increases need a major
+7. The superseded revision 1 MSRV proposal preserved Rust 1.88 through 1.x; increases need a major
    (0.x: minor), evidence and migration. All published consumer/build/macro/CLI
    code is in scope; stable-only development tooling is separately identified.
    At least one compatible dependency resolution is required, not every future
@@ -174,7 +179,7 @@ targets were not run.
 
 ## Maintainer sign-offs and release work
 
-Required review decisions: approve candidate inventory and experimental
+Historical revision 1 review decisions (superseded below): approve candidate inventory and experimental
 exceptions; empty defaults/frozen standard bundle; coordinated compatible-range
 model and hidden-code obligations; strict major-only post-1.0 MSRV increases;
 and Linux-only official target scope. These are concrete proposals, not approvals
@@ -204,3 +209,278 @@ and ran the policy checker/five drift tests successfully.
   maintainer/release gates, not missing local implementation deliverables.
 
 **READY FOR PR REVIEW**
+
+
+## Independent Merge Readiness Review
+
+Review of commit `264b5c33bec9ae4aa79a64a25f21b105950b0a66`, 2026-10-23.
+Policy revision 2 remains **proposed**, not approved. Fresh local verification is complete. Policy approval and successful hosted CI
+remain separate requirements.
+
+### A. Findings
+
+| ID / severity | Confirmed evidence and impact | Resolution |
+| --- | --- | --- |
+| IR1 / medium, policy sustainability | Revision 1 required Rust 1.88 throughout 1.x without alternatives or evidence of long-term dependency/compiler maintenance capacity. This is legal as a project policy but could require source-compatible major releases or maintenance forks for dependency/security evolution. | Compare A/B/C and propose managed minor-release MSRV evolution with explicit gates. Current Rust 1.88 unchanged; approval outstanding. |
+| IR2 / medium, premature contract wording | HTTP inventory called error/status behavior, body limits and timeouts contracts while #12/#19 remain open. Source uses `{code,message}` errors in AppError/JsonBody, separate security/timeout responses, a fixed extractor limit and optional processing timeout. These are not the complete pending error/protection design. | Separate implemented candidates from final approval; add exact #12/#19/#15/#33/#42 freeze gates. No implementation of those issues here. |
+| IR3 / medium, ambiguous classification | Candidate aggregate fields included `ScafraConfig.bootui` but BootUiConfig was experimental elsewhere. Broad component registration wording also obscured optional extension exceptions. | Mark the full BootUI config surface/aggregate field and all re-exports experimental; name candidate vs experimental registrations explicitly. |
+| IR4 / medium, checker false negatives | With current inputs, deleting workspace.dependencies.scafra-foundation returned `[]`. Renaming that entry/member edges to foundation-alias with package=scafra-foundation and wrong version also returned `[]`. Swapping canonical package identities could also pass. The checker validated existing name keys, not missing inherited edges or effective package aliases/identities. | Resolve aliases and check inherited edge presence; add deletion/alias/target-build regressions. Cargo would reject some invalid inputs too, but the advertised pre-build drift guard must not silently accept them. |
+| IR5 / low, checker input diagnostics | Contract field types were unchecked; a scalar feature forwarding value could trigger an unhandled TypeError, and a final valid TOML block could be accepted without a closing fence. | Validate small contract schema/fence and test invalid syntax/types via CLI, exit 1 with no traceback. |
+| IR6 / low, overly literal compatibility rules | Any default array change and removal of a feature dependency were described as major regardless of unchanged effective capabilities or public types. | Preserve empty defaults/effective standard opt-in boundary; allow equivalent forwarding and compatible private dependency maintenance. Real capability/source/behavior breaks still require a major. |
+| IR7 / low, verification gap | Startup hygiene fix was sound, but its consumer regression only compiled simple facade calls; no direct-foundation/structured-event assertion existed. | Extend actual isolated facade/default fixtures and add direct-foundation case to CI; assert target and structured fields on Rust 1.88. |
+
+No new authentication, resource ownership or runtime correctness defect was
+confirmed. Production Rust code in `264b5c3` remains unchanged by this review.
+The startup fix uses `$crate` to resolve foundation's existing info re-export,
+which then expands through tracing's own hygienic macro paths.
+
+The suspected snapshot issue was **withdrawn after reproduction**: changing
+only workspace.package.version did not simulate the actual workflow, whose
+global sed rewrites matching dependency strings too. The real selection shell
+passed for stable, snapshot and RC inputs in isolated copies. No publishing
+step or credential access was performed.
+
+### B. Corrections
+
+| File | Focused change |
+| --- | --- |
+| [api-stability.md](../api-stability.md) | Revision 2: justified MSRV proposal, freeze dependencies, explicit classifications, effective feature boundaries, precise supported/tested resolutions and checker limitations. |
+| [adr-002-compatibility-policy.md](adr-002-compatibility-policy.md) | Proposed decision with alternatives/consequences, as required by the compatibility review checklist for policy changes. |
+| [upgrading.md](../upgrading.md) | Compiler transition, experimental BootUI aggregate construction, unfinished HTTP contract guidance. |
+| [contributing.md](../contributing.md) | Review declared compiler and any justified/notified minor-release floor change. |
+| [publishing.md](../publishing.md) | HTTP freeze gates, compiler decision, coordinated lower-bound vs exact pin and tested snapshot rewrite. |
+| [check-api-policy.py](../../scripts/check-api-policy.py) | Contract validation, alias-aware versions and missing inherited dependency detection. |
+| [test_api_policy.py](../../scripts/test_api_policy.py) | Sixteen tests: original mutations plus malformed contract/CLI behavior, closing fence, missing/aliased/canonical-identity/target edges, valid release versions, actual selection shell, and deliberate Rust API deletion demonstrating limits. |
+| [arch103-consumers.py](../../scripts/arch103-consumers.py) | Foundation case; assert startup target/structured fields in facade/default/direct foundation consumers with no direct tracing dependency. |
+| [ci.yml](../../.github/workflows/ci.yml) | Include foundation in existing Rust 1.88 matrix; keep all previous cases. |
+| [this report](issue-16-review.md) | Separate evidence-based independent assessment and remaining decisions. |
+
+The existing docs/README.md edit and untracked AGENTS.md, .agents/, .codex/ and
+docs/development/ were present before this review and preserved. Branch and
+HEAD remain unchanged. Remote main was read with git ls-remote; its current
+`986f1bb5570a7f73eeeb32654692114625363949` equals the local merge base.
+The full original 14-file commit diff, requested documentation, complete issue
+#16, related #12/#19/#15/#33/#42, manifests, macro/generated contracts and both
+workflows were inspected. Historical ARCH-01 evidence was not treated as a
+fresh hosted CI result. The independent reviewer confirmed IR3/IR4 and the
+snapshot correction; a second review of these corrections is recorded below.
+
+### C. MSRV policy decision
+
+A (strict 1.88 for all 1.x) offers maximum predictability but potentially years
+of dependency/compiler maintenance. B (reviewed minor evolution) preserves
+patch floors while allowing justified security/Tokio/Axum/transitive/source
+needs; users taking minors review compiler changes. C (for example four stable
+compiler releases) has a defined moving window but imposes recurring floor/CI
+work without evidence that Scafra needs that cadence.
+
+Recommend **B**. It matches the distinction in the official
+[Cargo rust-version guidance](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+between compiler policy and source compatibility. Do not silently change a
+patch's required compiler. A future minor needs a concrete rationale,
+maintainer decision, old/new floor and affected-feature notes before final
+release/RC, updated shared manifests/policy/CI and locked/fresh consumer checks
+on the floor and stable. A source/behavior break still needs a major.
+Pre-1.0 floor increases use the next 0.y. No current compiler increase, invented
+support window, staffing, LTS or backport guarantee is introduced.
+
+### D. API stability inventory
+
+Stable candidates remain core lifecycle/typed graph/resources, loader/config,
+HTTP/router/security, scheduler/operations and documented macros/generated
+Graph/Resources/Overrides APIs. They are subject to final 1.0 inventory approval,
+not frozen by merging issue #16. BootUiConfig including fields/schema, all
+re-exports and ScafraConfig.bootui are experimental; enabling BootUI accepts
+source effects on aggregate construction. Non-BootUI fields keep their own
+classification. OptionalExtensionRegistration, ConfiguredExtensionRegistration,
+custom build extension/render interfaces and user-facing reload behavior are
+experimental. Hidden macro/support/supervisor plumbing is internal but must
+continue to interoperate with supported generated code. Generated public graph
+APIs are not dismissed as internal merely because they have generated names.
+Worker/runtime reflection/database adapters not implemented remain unsupported.
+No classification weakens authentication, authorization, redaction, dependency
+security, resource safety or cleanup.
+
+The SemVer matrix retains Rust-specific exhaustive field/variant, trait method,
+bounds/associated-type, inference/coherence/method-resolution, re-export and
+macro expansion hazards. Compatible private changes and equivalent feature
+forwarding are no longer categorically major. Defaults remain empty and the
+six effective standard capabilities remain the opt-in boundary; adding a new
+runtime integration there is different from private helper maintenance.
+
+### E. Open release dependencies
+
+- **#12:** finalize typed HTTP error conversions, status/payload/schema and
+  redaction across error producers; revisit AppError/WebError/ServerError and
+  JsonBody rejection contracts.
+- **#19:** finalize configurable/raw-body limits, processing timeout defaults,
+  connection/header ownership, supported overrides and #12-aligned errors;
+  revisit ServerConfig/RouterOptions/serving signatures before freeze.
+- **#15:** verify every generated template/command against actual published
+  packages; source/staged checks do not replace this.
+- **#33:** approve compiler/target coverage and fresh resolution evidence; its
+  original 1.82 issue text is historical, not the current declared floor.
+- **#42:** verify exact RC/final artifacts and a representative upgrade, then
+  freeze the final inventory/config/features/behavior with maintainer approval.
+
+These remain release responsibilities, not implemented/closed here. Security
+and ownership invariants hold throughout. Scafra 1.0 readiness also remains
+subject to #39 and the existing security/performance release gates.
+
+### F. Cargo compatibility
+
+All twelve packages currently inherit 0.1.0/Rust 1.88. Internal manifest ranges
+are ordinary caret-compatible lower bounds, not exact pins. Same-full-version
+sets are the recommendation and currently tested source/staged distribution.
+Other versions that satisfy the released manifests within a compatibility line
+must still preserve supported APIs/expansions: “untested” is no exemption from
+SemVer. No arbitrary cross-line, ignored-requirement or duplicate-type-identity
+combination is guaranteed. No historical mixed-version package set was tested.
+
+Macros depend on build/foundation, build on core/foundation, and emitted code
+uses facade/core/web hidden paths. A new helper needs an actual dependency edge
+that forces its minimum or an expansion that still works with old admitted
+runtimes. Raising the facade's macro minimum alone cannot constrain an old
+facade chosen by another application; macros/build have no web dependency that
+would force a web minimum. Preserve that expansion contract or move the
+coordinated compatibility line if no verified bound/fallback can enforce it.
+A compatible addition can use a minor; an unpreservable generated/source break
+needs a major (0.x: next minor), not blanket exact pins. Future lower-bound or
+helper changes require actual mixed lower-bound/latest consumers.
+
+The checker enforces the current project convention that first-party requirement
+strings use the coordinated release as their simple lower bound. This is a
+release consistency rule, not a general semver range solver. Existing consumer
+absence/union/security suites and publish DAG are retained. No blanket pins,
+new dependencies, default capabilities or architecture changes were introduced.
+
+CI runs stable workspace checks and a separate Rust 1.88 consumer matrix; these
+jobs are not dependencies inside the publish workflow. Publishing runs version
+selection → policy/tests → workspace/format/Clippy/tests → DAG/staged packages
+→ package lists → uploads/index waits. Release approval must require successful
+CI for the exact commit; this review does not claim automatic cross-workflow
+MSRV gating. Snapshot rewriting and stable/prerelease lower bounds were tested
+using the exact non-publishing selection step. Local source/staged evidence
+never proves crates.io acceptance or propagation.
+
+### G. Policy checker
+
+Verified scope: documented MSRV/member set/feature names/defaults/forwarding,
+workspace version/MSRV inheritance, aliased first-party version strings,
+normal/build/dev/target inherited edges, missing inherited dependency entries,
+invalid contract syntax/shapes/fence and successful coordinated release rewrites.
+Canonical dependency aliases must resolve to their own packages; renamed aliases
+remain supported. Two- and three-component numeric compiler floors are handled.
+Invalid CLI inputs fail with exit 1 and a diagnostic rather than a traceback.
+A fixture replacing Rust public source with an empty file still passes, by
+design: this is **not a SemVer/public API analyzer**. It cannot verify behavior,
+security, macro expansions, arbitrary Cargo ranges/resolutions or compiler/target
+matrix coverage. Removing all MSRV jobs still requires workflow review.
+
+Retain manual public-signature/behavior/macro review. Before 1.0, #39/#42 should
+pin and evaluate a maintained API diff/semver tool against the first real
+baseline (minimal and relevant features/direct crates), or attach a manual API
+diff artifact. A rustdoc-JSON tool brings compiler/nightly/version maintenance
+cost; no new CI tool is justified just to claim complete compatibility checking.
+
+### H. Tests
+
+Fresh review commands/results are recorded here separately from revision 1.
+Logs are under target/issue16-independent-review; external fixtures use the
+explicitly authorized /var/tmp/scafra-issue16-independent-* prefix.
+Workspace suites use TMPDIR under target/issue16-independent-review/tmp to
+preserve the outside-write boundary before external-fixture approval arrived.
+
+Environment: rustc 1.99.1 (`58cf8f9c3`, 2026-10-13), Cargo/Rust 1.88.0,
+host `x86_64-unknown-linux-gnu`. Every command below returned **exit 0 / PASSED**;
+expected failing fixture compilations/startups are asserted by their harnesses,
+not mistaken for successful raw compilations.
+
+| Command | Exit / observed result |
+| --- | --- |
+| `cargo fmt --all -- --check` | 0 / PASSED |
+| `cargo check --workspace` | 0 / PASSED |
+| `cargo test --workspace` | 0 / PASSED |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 0 / PASSED |
+| `cargo check --workspace --all-features` | 0 / PASSED |
+| `cargo test --workspace --all-features` | 0 / PASSED |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | 0 / PASSED |
+| `cargo +1.88.0 check --workspace --all-features --locked` | 0 / PASSED |
+| `cargo check --workspace --all-features --locked` | 0 / PASSED |
+| `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | 0 / PASSED |
+| `python3 scripts/check-api-policy.py` | 0 / PASSED |
+| `python3 scripts/check-api-policy.py --rust 1.88.0` | 0 / PASSED |
+| `python3 -m unittest discover -s scripts -p 'test_api_policy.py'` | 0 / PASSED, 16 tests; includes isolated stable/snapshot/RC workflow selection |
+| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-consumers.py /var/tmp/scafra-issue16-independent-consumers --runtime --timeout 600 --target-dir /var/tmp/scafra-issue16-independent-consumer-target` | 0 / PASSED, all 16 isolated consumers, no forbidden packages; real startup/security/readiness/SIGTERM/cleanup. Facade/default/direct foundation logging assertions passed. |
+| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-negative.py --output /var/tmp/scafra-issue16-independent-negative --target-dir /var/tmp/scafra-issue16-independent-consumer-target --timeout 600` | 0 / PASSED, 9 cases including expected compiler/startup failures and feature union |
+| `python3 scripts/arch103-publish-order.py --check` | 0 / PASSED, both arrays/all 12 packages |
+| `python3 scripts/arch103-package-check.py /var/tmp/scafra-issue16-independent-packages --offline` | 0 / PASSED, 12 extracted archives + 2 registry-source macro consumers |
+| `cargo test -p scafra-cli --test generated_projects generated_projects_serve_routes_and_shutdown_gracefully -- --ignored --nocapture` | 0 / PASSED, all 4 generated kinds over HTTP and shutdown |
+| `cargo test --offline --locked --manifest-path examples/async-resource/Cargo.toml` | 0 / PASSED, 6 tests |
+| `cargo doc --workspace --all-features --no-deps` | 0 / PASSED |
+| Local Markdown links/heading anchors + TOML example parser | 0 / PASSED, 112 relative links/anchors and both new-guide TOML blocks |
+| `git diff --check` | 0 / PASSED |
+
+Additional actual CLI version-emission fixtures copied normalized CLI/foundation
+manifests and source into authorized disposable roots, coordinated those two
+versions, and compiled/executed each on Rust 1.88 with no Scafra facade sibling
+(to force registry-mode generation):
+
+```bash
+cargo +1.88.0 run --offline --manifest-path /var/tmp/scafra-issue16-independent-cli-versions/stable/cli/Cargo.toml --target-dir /var/tmp/scafra-issue16-independent-cli-target -- new /var/tmp/scafra-issue16-independent-cli-versions/stable/application
+cargo +1.88.0 run --offline --manifest-path /var/tmp/scafra-issue16-independent-cli-versions/snapshot/cli/Cargo.toml --target-dir /var/tmp/scafra-issue16-independent-cli-target -- new /var/tmp/scafra-issue16-independent-cli-versions/snapshot/application
+```
+
+Both returned **0 / PASSED**. Parsed generated dependencies were respectively
+`scafra.version = "0.1.0"` and `"0.1.1-snapshot.16"`, with web selected, defaults
+false and no path dependency. Matching foundation fixture requirements were
+rewritten too. This verifies version emission, not full prerelease publication
+or downloading a generated app's dependencies from crates.io. Results are in
+`/var/tmp/scafra-issue16-independent-cli-versions/results.json` and summarized in
+target/issue16-independent-review/observed-results.json. No source workspace
+version or lockfile changed.
+
+The final independent reviewer reran the checker, Rust 1.88 mode, all 16 Python
+tests and whitespace check successfully, and found no remaining material issue
+in the reviewed corrections. All original changed files were reviewed. No
+required local command is omitted. Hosted CI, real crates.io upload/index and
+other target verification are **NOT RUN**; no approval or 1.0 release evidence
+is inferred from local staging. The source workspace suites include the macro
+UI and graph compile-pass/fail fixtures. The normally ignored CLI network test
+was explicitly executed above.
+
+### I. Approval requirements
+
+Maintainers must explicitly approve:
+
+1. Managed minor-release MSRV evolution and its review/notice/verification gates
+   (ADR-002); the current declared floor remains 1.88.
+2. Candidate vs final-freeze boundary and the named #12/#19/#15/#33/#42 gates.
+3. Experimental BootUI aggregate/re-export and extension/build/reload exceptions.
+4. Empty defaults and effective standard capability boundary, while permitting
+   compatible forwarding/private dependency maintenance.
+5. Coordinated releases with compatible ranges and generated-code obligations,
+   plus Linux GNU x86_64 as the sole officially tested target scope.
+6. The final 1.0 API inventory at its release commit after the release blockers.
+
+Approval of test directories authorized only local testing, not product policy,
+a commit, publication, issue update or release. None of those actions occurred.
+
+### J. Merge decision
+
+**READY FOR PR REVIEW**.
+
+- **Technical correctness:** confirmed checker/policy issues corrected; all
+  required local checks and targeted external/version regressions passed.
+  Independent correction review found no remaining material issue.
+- **Policy approval:** NOT APPROVED in this review; revision 2 and ADR-002 are
+  concrete recommendations requiring the decisions in section I.
+- **Hosted CI:** NOT RUN/NOT ASSERTED here; require successful required checks
+  on the final PR commit, including the expanded MSRV consumer matrix.
+- **Merge:** conditional on explicit policy approval, successful hosted CI and
+  normal maintainer review. Local success does not authorize merge.
+- **Scafra 1.0.0:** NOT READY on this review alone. #12/#19/#15/#33/#42 and the
+  overall release gates still determine final API freeze/artifact readiness.
+
+No commit, branch switch, push, PR, merge, issue mutation, tag, package upload
+or release was performed. Existing unrelated work is preserved.
