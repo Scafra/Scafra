@@ -6,6 +6,9 @@ Axum, Tokio, Tower, Serde, and `tracing`.
 
 ## Start here
 
+- [API stability and compatibility](api-stability.md) — proposed 1.0 contract, API inventory, versions, features, MSRV and targets.
+- [Upgrading](upgrading.md) — capability, source and runtime migration.
+
 - [Getting started](getting-started.md) — create and run your first Scafra
   application.
 - [Module and feature reference](modules.md) — implemented capabilities and migration.

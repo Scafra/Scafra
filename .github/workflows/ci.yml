@@ -20,6 +20,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Check compatibility policy
+        run: |
+          python3 scripts/check-api-policy.py
+          python3 -m unittest discover -s scripts -p 'test_api_policy.py'
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -50,6 +55,8 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
+      - name: Check policy against consumer compiler
+        run: python3 scripts/check-api-policy.py --rust "${{ matrix.rust }}"
       - name: Fetch locked registry dependencies
         run: cargo fetch --locked
       - name: Verify isolated feature selection and runtime

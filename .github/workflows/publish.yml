@@ -56,6 +56,11 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Check compatibility policy
+        run: |
+          python3 scripts/check-api-policy.py
+          python3 -m unittest discover -s scripts -p 'test_api_policy.py'
+
       - name: Check workspace
         run: cargo check --workspace --all-features
 

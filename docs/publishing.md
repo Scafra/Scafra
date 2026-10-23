@@ -157,3 +157,39 @@ both registry-source macro consumers during implementation. The direct crates.io
 resolution limitation above still applies until stable dependencies are
 published. Local staged success must not be reported as a crates.io upload or
 crates.io index-resolution test.
+
+## Compatibility release gate
+
+The [API stability policy](api-stability.md) is the canonical versioning,
+feature, MSRV, target and prerelease contract. It remains proposed until
+maintainer approval; 1.0 has not shipped. All twelve packages use one coordinated
+version and release commit, including unchanged packages. Update the root
+workspace version **and every first-party dependency requirement** together;
+check `python3 scripts/check-api-policy.py` after version selection. Keep
+compatible ranges unless resolution evidence justifies a different contract.
+The CLI, macros and build generator must be reviewed with their target runtime.
+
+Before authorizing a stable tag or prerelease publication:
+
+1. Apply the [maintainer checklist](contributing.md#compatibility-review-checklist),
+   select the version from the compatibility matrix, and prepare release notes
+   with API/config/feature/dependency/MSRV changes, known limitations and linked
+   migration examples. A breaking release requires a written maintainer decision.
+2. Attach all workspace default/all-feature, policy, Rust 1.88, external consumer,
+   negative/security/lifecycle, generated-project and staged-package results
+   required by the policy for the exact release commit. The publish job now
+   checks policy consistency too; its stable workspace checks do not replace
+   the separate MSRV/isolated-consumer CI jobs.
+3. Freeze the intended stable contract in an RC; rerun on each RC correction.
+   #15/#42 own real published-package, all-template and previous-version upgrade
+   verification. Directory registry-source staging does not prove crates.io
+   acceptance; smoke-test final published artifacts as part of release completion.
+4. Require #33 compiler/target evidence, #43 advisory/redaction triage and named
+   security ownership, #9 benchmark evidence and #39 explicit go/no-go review.
+   No unresolved material security issue may be waived by a green compile check.
+
+Alpha/beta/RC/snapshot versions are coordinated prereleases with the support
+limits in the policy. They do not establish a stable maintenance line. No
+publication is authorized by writing this policy. The existing order checker
+continues to enforce foundation → core → dependent packages, including build
+before macros; use the actual workflow arrays as the full ordered list.

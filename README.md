@@ -4,6 +4,8 @@ Scafra Cargo defaults are empty. Generated projects select `web`; select
 `security`, `jwt`, `jwks`, `actuator`, `scheduler`, `bootui`, or the `standard`
 bundle explicitly. See the [module reference and migration guide](docs/modules.md)
 for dependencies, feature combinations and fail-closed configuration behavior.
+The [API compatibility policy](docs/api-stability.md) defines the proposed 1.0
+contract; [upgrade guidance](docs/upgrading.md) covers current pre-1.0 migration.
 
 Scafra is an open-source, batteries-included web application framework for Rust.
 It gives Rust applications a clear structure for composition, configuration,

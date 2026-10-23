@@ -418,7 +418,7 @@ def main():
             (project / "build.rs").write_text('fn main() { scafra_build::discover_graph("src/main").unwrap(); }\n')
             (project / "src/main").mkdir()
             (project / "src/main/components.rs").write_text(PROPERTIES)
-            source = ('include!(concat!(env!("OUT_DIR"), "/scafra_modules.rs"));\nfn main() { '
+            source = ('include!(concat!(env!("OUT_DIR"), "/scafra_modules.rs"));\nfn main() { scafra::startup!("external consumer"); '
                       'let graph = __scafra_graph::compose().unwrap(); let _ = graph.into_resources(); '
                       'let mail = scafra::Properties::<components::Mail>::with_loader(scafra::ConfigLoader::new().env_prefix("ARCH103_UNUSED").override_value("mail.host", "example.test")).load().unwrap(); assert_eq!(mail.host,"example.test"); }\n')
         (project / "Cargo.toml").write_text(manifest)
