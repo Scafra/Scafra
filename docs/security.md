@@ -155,6 +155,14 @@ route requires roles or scopes.
 
 ## HTTP responses and configuration
 
+Every Scafra-owned authentication 401 includes an applicable challenge. Applications
+returning their own authentication errors use
+`AppError::Unauthorized(AuthenticationChallenge::bearer())` or a validated Basic
+challenge. Missing/disabled/invalid security setup and invalid policy metadata
+are server failures: direct router/guard calls return generic 500 and never run
+the protected handler. Known hide settings retain empty404; standard startup
+continues to reject invalid setup before listening. See [HTTP errors](http-errors.md).
+
 - Missing, malformed, invalid, or expired credentials on a protected route
   return `401 Unauthorized` with a generic authentication challenge.
 - Requests with more than one `Authorization` header value are malformed and

@@ -11,10 +11,10 @@ pub(crate) fn protected(headers: &HeaderMap, config: &ActuatorConfig) -> Option<
         return None;
     }
     let Some(token) = config.security.bearer_token.as_deref() else {
-        return Some(unauthorized());
+        return Some(error_response(HttpError::Internal));
     };
     if token.trim().is_empty() {
-        return Some(unauthorized());
+        return Some(error_response(HttpError::Internal));
     }
     if headers.get_all("authorization").iter().count() > 1 {
         return Some(unauthorized());
@@ -32,4 +32,9 @@ fn unauthorized() -> Response {
     let error = HttpError::Unauthorized;
     let status = StatusCode::from_u16(error.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     (status, [("www-authenticate", "Bearer")], axum::Json(error)).into_response()
+}
+
+fn error_response(error: HttpError) -> Response {
+    let status = StatusCode::from_u16(error.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    (status, axum::Json(error)).into_response()
 }

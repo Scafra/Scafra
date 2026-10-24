@@ -118,11 +118,24 @@ def main():
                         ('not-found', 404, 'not_found', 'resource not found'),
                         ('validation', 400, 'validation_error', 'request validation failed'),
                         ('internal', 500, 'internal_error', 'internal server error'),
+                        ('unauthorized', 401, 'unauthorized', 'authentication required'),
+                        ('basic', 401, 'unauthorized', 'authentication required'),
                         ('typed', 400, 'validation_error', 'quantity must be positive'),
                         ('slow', 504, 'request_timeout', 'request processing timed out'),
                     ]:
                         contract(request(port, '/errors/' + path), status, code, message)
                         results['checks'].append(path)
+                    for path, challenge in [('unauthorized', 'Bearer'), ('basic', 'Basic realm="Orders"')]:
+                        for method in ['GET', 'HEAD']:
+                            actual, headers, body = request(port, '/errors/' + path, method)
+                            assert actual == 401, (actual, headers, body)
+                            assert dict(headers)['www-authenticate'] == challenge, headers
+                            assert dict(headers)['content-type'] == 'application/json'
+                            if method == 'HEAD':
+                                assert body == b''
+                            else:
+                                assert json.loads(body) == {'code': 'unauthorized', 'message': 'authentication required'}
+                    results['checks'].append('public-generated-application-authentication-GET-HEAD-challenges')
                     for body, media, status, code, message in [
                         (SENTINEL, 'application/json', 400, 'invalid_json', 'invalid JSON request'),
                         (json.dumps({'quantity': SENTINEL}), 'application/json', 422, 'validation_error', 'request validation failed'),

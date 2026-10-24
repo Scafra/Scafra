@@ -17,9 +17,9 @@ pub use crate::{
 };
 #[cfg(feature = "web")]
 pub use crate::{
-    build_router, controller, delete, get, main, post, put, routes, AppError, ControllerPrefix,
-    ControllerRegistration, ControllerRoutes, JsonBody, Result, RouteMetadata, ServerError,
-    ServerOutcome, WebError,
+    build_router, controller, delete, get, main, post, put, routes, AppError,
+    AuthenticationChallenge, ControllerPrefix, ControllerRegistration, ControllerRoutes, JsonBody,
+    Result, RouteMetadata, ServerError, ServerOutcome, WebError,
 };
 #[cfg(feature = "actuator")]
 pub use crate::{register_health_check, ActuatorConfig, HealthRegistry, HealthRegistryError};

@@ -262,6 +262,6 @@ async fn disabled_global_security_does_not_skip_explicitly_protected_routes() {
 
     assert_eq!(
         send(&router, Method::GET, "/protected/route", None).await,
-        StatusCode::UNAUTHORIZED
+        StatusCode::INTERNAL_SERVER_ERROR
     );
 }

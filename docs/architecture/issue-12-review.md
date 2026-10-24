@@ -1,11 +1,12 @@
 # Issue #12 implementation review
 
-Status: **READY FOR PR REVIEW**. Implementation, documentation, workspace checks,
-focused feature tests, Rust 1.88 verification, live HTTP applications and both
-mandatory existing isolated consumer suites have passed. All 20 issue #12
-acceptance criteria below are PASS; no known relevant code defect remains.
-Hosted CI, maintainer compatibility/design review and release approval remain
-separate. This does not claim the proposed #16 policy has shipped.
+Status: **BLOCKED** on fresh authorization for the external consumer/negative
+verification suites. The confirmed 401 defect is corrected. All seven standard
+workspace checks, requested focused checks, Rust 1.88 check, two live generated
+application variants and independent targeted review checks have passed on the
+correction. No known source defect remains, but final verification is incomplete.
+Historical verification below is not reused as proof of the corrected tree;
+the final protocol section records the current results and remaining gate.
 
 ## Architecture decision
 
@@ -38,8 +39,9 @@ Application-owned errors implement ordinary `IntoResponse` and explicit `From`.
 
 ## Before and after / public API
 
-- `AppError::{NotFound,Unauthorized,Internal}` and JSON rejection statuses,
-  fields and safe messages remain compatible.
+- `AppError::{NotFound,Internal}` and JSON rejection statuses, fields and safe
+  messages remain compatible. The final protocol correction requires an explicit
+  challenge payload on `Unauthorized`; see the final protocol review below.
 - `AppError::Validation(String)` retains its payload for private inspection but
   now emits `request validation failed` (400). This intentional security default
   is a behavioral break for callers previously publishing arbitrary strings.
@@ -71,8 +73,9 @@ fall back to another authenticator.
 Visible 401s advertise configured Bearer and/or Basic with separate
 `WWW-Authenticate` fields; 403s do not carry challenges. Actuator enforces its own
 Bearer configuration and rejects duplicate Authorization values before evaluating
-health checks. `AppError::Unauthorized` has no configuration access: applications
-using it for their own authentication must attach their configured challenge.
+health checks. The final protocol correction makes `AppError::Unauthorized`
+carry an explicitly selected typed challenge, so its conversion always emits the
+required authentication header without context lookup.
 
 Hidden denials remain empty 404 without media type, challenge or error code.
 Native Axum fallback metadata and selected-route metadata can differ before
@@ -101,9 +104,10 @@ Response streaming and non-yielding code are not newly bounded.
 | --- | --- |
 | AppError absent/input/authentication/authorization/internal | shared mapping and Axum IntoResponse |
 | JsonBody syntax/data/missing or unsupported content type/limit/stream failure | shared mapping; raw rejection sources discarded |
-| Security context, missing context, invalid policy/config and credential denials | shared visible payload; concealment exception retained |
+| Missing/disabled/invalid context or invalid policy/config | final protocol correction: generic500 (known hidden404 retained); no invented scheme |
+| Configured credential denials | shared401 plus actual configured challenge(s) |
 | Missing role or scope | 403 shared payload; enforcement unchanged |
-| Actuator authentication | shared 401 plus independent Bearer challenge |
+| Actuator authentication | shared401 plus independent Bearer challenge; invalid server token configuration500 |
 | Request-processing timeout | shared 504; same cancellation/deadline ordering |
 | Unknown routes / unsupported methods | native Axum 404/405, Allow and custom fallbacks preserved |
 | HEAD / successful no-content | native Axum handling, no blanket rewriting |
@@ -359,7 +363,7 @@ compatibility is made.
 | Consistent status and media-type semantics | PASS | matrix, exact JSON tests and live HTTP |
 | Ergonomic typed application conversion | PASS | AppError and application-owned DomainError in generated controllers |
 | JSON parsing and validation contract | PASS | existing byte-exact tests plus generated and live matrix |
-| Authentication status and configured challenges | PASS | Basic/bearer/JWT tests and live modes |
+| Authentication status and configured challenges | PASS | final correction: typed standalone challenges, middleware matrix, real HTTP GET/HEAD and setup500 tests |
 | Authorization remains fail-closed | PASS | existing security negatives, nested role/scope and actual 403 |
 | Hidden-denial privacy | PASS | unchanged empty404; full live HTTP1 equality; custom embedding limits documented |
 | Internal details not exposed publicly | PASS | Internal constructor/variant, parser/stream/validation sentinel bodies/logs |
@@ -369,14 +373,15 @@ compatibility is made.
 | Minimal web-only dependency isolation | PASS | MSRV isolated normal tree excludes optional modules/security clients |
 | Public API and migration documentation | PASS | canonical guide, upgrading, policy inventory and this review |
 | Unit tests pass | PASS | default/all-feature workspace and focused tests |
-| Integration tests pass | PASS | workspace, feature matrix, dedicated live consumers, 16 existing isolated consumers and 9 negative cases pass |
+| Integration tests pass | PARTIAL | current workspace, protocol matrix and live web/standard pass; existing isolated/negative suites need fresh authorization for this correction |
 | Actual generated application over HTTP | PASS | six isolated feature consumers, macro main/discovery, bounded SIGTERM |
 | Security redaction regressions | PASS | captured TRACE/body sentinels, existing config/JWT/JWKS tests and live logs |
 | Rust 1.88 compatibility | PASS | locked all-feature workspace, controller tests and standalone web live consumer |
 | Documentation matches implementation | PASS | response bytes/mappings and compiled equivalent controller/conversion examples; README timeout corrected |
-| No relevant regression unresolved | PASS | independent review findings fixed; final source verified by all required local checks and both existing suites, with no unexpected failures |
+| No relevant regression unresolved | PARTIAL | no known source defect after independent review and current local tests; final clearance awaits fresh existing isolated/negative verification |
 
-Final local status: **READY FOR PR REVIEW**. All 20 acceptance criteria are PASS.
+Initial local assessment was READY FOR PR REVIEW; it is superseded by the
+confirmed 401 protocol finding above.
 Hosted CI and maintainer review remain separate from local completion; this is
 not authorization to merge, publish, or close the issue.
 
@@ -387,3 +392,188 @@ route override policy, and connection/header timeout ownership. This issue keeps
 the existing 1 MiB extractor default and optional request-processing timeout.
 Hosted CI, maintainer compatibility approval, release packaging/publishing and
 final 1.0 freeze remain separate from local PR readiness.
+
+## Final HTTP protocol correction for PR #110
+
+Reviewed baseline: `e8dc45efa97ee13a05bba2c273a656754178e80c` on the existing
+`12-standardize-http-api-error-responses` branch, initially clean. The previous
+all-PASS assessment did not establish standalone 401 compliance. It was withdrawn
+when this review confirmed the missing mandatory challenge.
+
+### Root cause and reproduction before implementation
+
+The unit `AppError::Unauthorized` mapped directly to the neutral `HttpError`
+payload without attaching authentication metadata. Middleware had scheme context,
+but missing-context and invalid-setup branches also reused that credential-error
+classification. Earlier integration assertions verified status and JSON without
+checking the challenge, and documentation shifted the header obligation to the
+application despite a public standalone conversion.
+
+RFC 9110 section 11.6.1 requires an applicable `WWW-Authenticate` challenge on a
+401 ([reference](https://www.rfc-editor.org/rfc/rfc9110.html#section-11.6.1)). Merely
+documenting that applications should repair the header was insufficient.
+
+Three regressions were added and run before modifying production code. Each
+returned test exit code 101 for the expected compliance failure. Logs and exact
+commands are preserved in `target/issue12-protocol-repro/results.json` and
+`target/issue12-protocol-repro/{0,1,2}.log`:
+
+```bash
+cargo test -p scafra-web --no-default-features direct_application_authentication_error_requires_a_challenge
+cargo test -p scafra --no-default-features --features web --test http_errors public_generated_authentication_error_requires_a_challenge
+cargo test -p scafra-security --test route_local missing_security_context_is_a_server_failure_not_challengeless_authentication
+```
+
+The first two verified the existing 401, media type and exact JSON, then failed
+because the challenge was absent. The third demonstrated that a missing server
+security context was incorrectly treated as a challenge-less 401 rather than a
+server setup failure. These are intentionally retained failing baseline results;
+they must not be reported as successful checks of the reviewed commit.
+
+### Smallest sound solution and alternatives
+
+Use explicit typed metadata for application-owned authentication and the existing
+context for framework-owned authentication. `AppError::Unauthorized` now requires
+an `AuthenticationChallenge` payload. Its private `HeaderValue` cannot be
+constructed unchecked through public fields. `bearer()` emits Bearer;
+`basic(realm)` quotes and escapes the realm and validates header bytes with
+`HeaderValue`, returning `InvalidHeaderValue` for invalid bytes such as CR/LF.
+Basic realm validation belongs at application startup; realms must not contain
+credentials or request-supplied data. Only Scafra's supported Basic and Bearer
+constructors are added. Custom schemes remain ordinary application-owned Axum
+`IntoResponse`, avoiding a speculative general challenge parser or registry.
+
+A global response-repair layer would guess schemes for public handlers or rewrite
+unrelated responses. A hardcoded Bearer default would advertise an authenticator
+that might not exist. Mapping genuine authentication failure to 403 would confuse
+identity and authorization. Retaining a unit variant with a 500 fallback would
+silently change valid application authentication failures. The small pre-1.0
+payload change instead requires callers to make the applicable scheme explicit
+at compile time while preserving the intended 401 wire classification.
+
+Middleware derives challenges only from actual validated configuration. Missing,
+disabled or invalid context and invalid policy metadata are server setup failures:
+return a generic 500 `internal_error`, preserving known hidden404 settings. The
+401 construction path also defensively checks that a challenge was attached.
+Actuator's enabled-but-missing/blank token configuration similarly returns a
+safe500; genuine rejected credentials retain its independent Bearer401. Standard
+router/startup validation continues to reject invalid configuration before bind.
+
+### Before/after protocol and API contract
+
+| Path | Reviewed commit | Corrected contract |
+| --- | --- | --- |
+| Public application authentication error | Unit variant, 401 JSON, no challenge | `Unauthorized(AuthenticationChallenge)`, same401 JSON plus explicit applicable challenge |
+| Missing/invalid/expired configured credentials | 401 and configured challenge(s) | unchanged |
+| Missing route/handwritten security context | challenge-less401 | generic500, no challenge, handler not run |
+| Invalid security config / disabled required security | 401, sometimes no or inapplicable challenge | generic500; known hide setting still empty404 |
+| Invalid authorization metadata | credential-style401 | generic500; known hide setting still empty404 |
+| Valid principal missing role/scope | 403, no challenge | unchanged |
+| Hidden credential/authorization denial | empty404, no challenge | unchanged |
+| Actuator missing/blank server token | 401 plus Bearer | generic500, no challenge, checks not run |
+| Actuator rejected client token with valid config | 401 plus Bearer | unchanged |
+| HEAD authentication failure | incomplete standalone headers | 401 plus applicable challenge and no body |
+
+`AuthenticationChallenge` is exported by `scafra_web`, `scafra::web`, the web-enabled
+facade root and prelude, under the same feature boundary as `AppError`. Replace
+`AppError::Unauthorized` with
+`AppError::Unauthorized(AuthenticationChallenge::bearer())` for an implemented
+Bearer authenticator, or the fallible Basic constructor. Exhaustive matches use
+`Unauthorized(_)`. This is a deliberate pre-1.0 Rust source break and a correction
+to invalid-setup HTTP status/code behavior; workspace versions remain unchanged.
+There are no manifest/dependency/feature changes, no HTTP dependencies in foundation,
+no mandatory security dependencies for web-only consumers, and no global state.
+Successful request processing is unchanged. The payload format and redaction,
+route selection, credential verification, role/scope checks, public overrides,
+legacy inventory behavior, health documents, JSON errors, timeouts and native
+Axum interoperability are preserved.
+
+### Independent correction review
+
+An independent read-only security reviewer inspected the targeted diff and found
+no confirmed correctness or security defect. It independently executed:
+
+- `cargo test -p scafra-web --no-default-features challenge` — PASSED, two tests.
+- `cargo test -p scafra-security --test route_local --test middleware` — PASSED,
+  14 tests including real HTTP setup-failure checks.
+
+The reviewer did not independently run the Python live harness or full workspace
+matrix. Primary-agent verification results are recorded separately below.
+
+### Correction verification and final reassessment
+
+All commands in this table returned exit code 0 on the corrected source.
+Exact exit codes, durations and logs are retained in
+`target/issue12-protocol-checks/results.json`:
+
+| Current correction command | Outcome |
+| --- | --- |
+| `cargo fmt --all -- --check` | PASSED (`00.log`) |
+| `cargo check --workspace` | PASSED (`01.log`) |
+| `cargo test --workspace` | PASSED (`02.log`) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | PASSED (`03.log`) |
+| `cargo check --workspace --all-features` | PASSED (`04.log`) |
+| `cargo test --workspace --all-features` | PASSED (`05.log`) |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASSED (`06.log`) |
+| `cargo test -p scafra-web --no-default-features` | PASSED (`07.log`) |
+| `cargo test -p scafra-web --all-features` | PASSED (`08.log`) |
+| `cargo test -p scafra-security --all-features` | PASSED (`09.log`) |
+| `cargo test -p scafra --features standard --test http_errors` | PASSED (`10.log`) |
+| `cargo +1.88.0 check --workspace --all-features --locked` | PASSED (`11.log`) |
+| `python3 scripts/check-api-policy.py` | PASSED (`12.log`) |
+| `python3 -m unittest discover -s scripts -p test_api_policy.py` | PASSED (`13.log`) |
+| `cargo test -p scafra --no-default-features --features web --test http_errors` | PASSED (`14.log`) |
+| `cargo test -p scafra-security --no-default-features` | PASSED (`15.log`) |
+
+Additional focused run:
+`cargo test -p scafra-web -p scafra-security -p scafra-actuator --all-features`
+PASSED (`target/issue12-protocol-repro/focused.log`). An initial invocation
+repeated `--all-features` and Cargo rejected its command line before compiling;
+the corrected invocation above passed. This was not a source/test failure.
+
+The existing live harness was extended with a public generated controller
+returning explicitly selected Bearer and Basic errors. These actual generated
+applications both PASSED, including status, exact JSON, applicable challenges,
+HEAD empty-body semantics, normal failures, limits, timeouts, native Json and
+Allow handling and bounded SIGTERM shutdown:
+
+```bash
+python3 scripts/issue12-http.py target/issue12-protocol-live-web --features web --target-dir target/issue12-live-standard/target
+python3 scripts/issue12-http.py target/issue12-protocol-live-standard --target-dir target/issue12-live-standard/target
+```
+
+Preserved logs: `target/issue12-protocol-live-web.log`,
+`target/issue12-protocol-live-standard.log`; each output directory contains its
+own sources, lockfile, normal dependency tree, process logs and `results.json`.
+These are independently resolved source/path consumers, not published artifacts.
+The web-only tree asserts absence of security/JWT/actuator/scheduler/reqwest.
+Standard additionally verifies Basic/Bearer middleware challenges, role/scope403,
+public overrides, invalid JWT401, hidden404 full HTTP/1 header equality (excluding
+Date), independent actuator security and health. Existing workspace regressions
+cover nested controllers, route-local policies, legacy inventory adapters,
+JWT/JWKS, configuration redaction, JSON validation and 504 timeout behavior.
+
+`security_setup_failures_are_protocol_correct_over_http` also serves actual
+loopback HTTP for GET and HEAD against route-local and handwritten guards without
+context, invalid legacy/context configurations, disabled required security,
+contradictory metadata and known hidden invalid configuration. Assertions require
+generic JSON500 without challenge or leaked sentinel/private handler data, or an
+empty404 for concealment. Read and shutdown operations have five-second bounds.
+
+Fresh external suite commands are **NOT RUN (BLOCKED)**. They reject checkout-local
+outputs. Because this corrective assignment explicitly says not to assume prior
+authorization covers new external paths, fresh approval was requested for newly
+created `/var/tmp/scafra-issue12-protocol-*` directories. No answer has been
+received, and no new external path was written during this corrective review.
+After approval, rerun both `scripts/arch103-consumers.py --runtime` and
+`scripts/arch103-negative.py` on Rust 1.88.0, preserving their results under that
+new prefix. Prior 16/16 and 9/9 results above remain historical evidence for the
+initial implementation, not current verification of this correction.
+
+The 20 acceptance criteria were reassessed: 18 PASS and two PARTIAL (integration
+coverage/final regression clearance pending the fresh suites). Standalone public
+authentication compliance itself is PASS, with the root cause fixed and tested;
+there is no assertion that an incomplete review has all 20 PASS. Final status is
+**BLOCKED** on the verification permission gate, rather than READY FOR MERGE REVIEW.
+Hosted CI and maintainer approval remain separate. No commit, push, merge, PR
+creation, package publication or issue closure was performed.

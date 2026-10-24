@@ -73,6 +73,10 @@ async fn request(
         .await
         .expect("router should respond");
     let status = response.status();
+    if status == StatusCode::INTERNAL_SERVER_ERROR {
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert!(!response.headers().contains_key("www-authenticate"));
+    }
     if status == StatusCode::UNAUTHORIZED {
         assert_eq!(response.headers()["content-type"], "application/json");
         assert_eq!(response.headers()["www-authenticate"], "Bearer");
@@ -155,10 +159,10 @@ async fn blank_configured_tokens_fail_closed_even_for_direct_router_construction
         let (router, calls) = protected_router(Some(configured_token));
         for candidate in [None, Some(bearer("Bearer")), Some(bearer("Bearer  "))] {
             let (status, body) = request(&router, "/ready", candidate).await;
-            assert_eq!(status, StatusCode::UNAUTHORIZED);
+            assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
             assert_eq!(
                 body,
-                r#"{"code":"unauthorized","message":"authentication required"}"#
+                r#"{"code":"internal_error","message":"internal server error"}"#
             );
         }
         assert_eq!(calls.load(Ordering::Relaxed), 0);
@@ -170,10 +174,10 @@ async fn enabled_security_without_a_configured_token_fails_closed() {
     let (router, calls) = protected_router(None);
     let (status, body) =
         request(&router, "/health", Some(bearer(&format!("Bearer {TOKEN}")))).await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(
         body,
-        r#"{"code":"unauthorized","message":"authentication required"}"#
+        r#"{"code":"internal_error","message":"internal server error"}"#
     );
     assert_eq!(calls.load(Ordering::Relaxed), 0);
 }

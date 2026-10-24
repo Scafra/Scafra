@@ -113,7 +113,7 @@ pub async fn authorize_route(
         if validate_authorization_metadata(&[policy]).is_err() || policy_requires_security(&policy)
         {
             return crate::errors::error_response(
-                scafra_foundation::http_error::HttpError::Unauthorized,
+                scafra_foundation::http_error::HttpError::Internal,
             );
         }
         next.run(request).await

@@ -162,7 +162,8 @@ async fn invalid_configuration_still_denies_and_hidden_denials_use_not_found() {
         ..SecurityConfig::default()
     });
     let response = send(&invalid, Method::GET, "/private", None).await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!response.headers().contains_key("www-authenticate"));
 
     let hidden = protected_router(SecurityConfig {
         enabled: true,

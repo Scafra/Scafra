@@ -44,9 +44,9 @@ pub use scafra_web as web;
 #[cfg(feature = "web")]
 pub use scafra_web::{
     build_router, join_paths, run_on, run_on_with_log_level, serve_on, serve_on_with_policy,
-    serve_on_with_shutdown, shutdown_channel, AppError, ControllerPrefix, ControllerRegistration,
-    ControllerRoutes, JsonBody, RouteAuthorizationMetadata, RouteMetadata, ServerError,
-    ServerOutcome, ShutdownFuture, ShutdownHandle, ShutdownRequestError, WebError,
+    serve_on_with_shutdown, shutdown_channel, AppError, AuthenticationChallenge, ControllerPrefix,
+    ControllerRegistration, ControllerRoutes, JsonBody, RouteAuthorizationMetadata, RouteMetadata,
+    ServerError, ServerOutcome, ShutdownFuture, ShutdownHandle, ShutdownRequestError, WebError,
 };
 #[cfg(feature = "actuator")]
 pub use scafra_web::{

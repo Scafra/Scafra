@@ -170,5 +170,5 @@ async fn route_local_guard_cannot_be_removed_by_omitting_finalization_or_securit
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }

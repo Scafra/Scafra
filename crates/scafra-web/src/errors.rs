@@ -1,11 +1,34 @@
 use std::{net::SocketAddr, time::Duration};
 
 use axum::{
-    http::StatusCode,
+    http::{header::WWW_AUTHENTICATE, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use scafra_foundation::http_error::HttpError;
 use scafra_foundation::{capture_error_backtrace, ShutdownPolicy, ShutdownReason};
+
+/// An explicitly selected, header-safe authentication challenge.
+///
+/// Select the scheme implemented by the application's authenticator. These
+/// constructors do not enable authentication or inspect request credentials.
+/// Custom schemes can use an application-owned Axum `IntoResponse` type.
+#[derive(Debug, Clone)]
+pub struct AuthenticationChallenge(HeaderValue);
+
+impl AuthenticationChallenge {
+    /// Challenges an application-owned Bearer authenticator.
+    pub fn bearer() -> Self {
+        Self(HeaderValue::from_static("Bearer"))
+    }
+
+    /// Challenges Basic authentication with a quoted, escaped protection realm.
+    /// Rejects invalid HTTP header bytes, including CR/LF injection. Configure
+    /// the realm once at startup; never derive it from request credentials.
+    pub fn basic(realm: &str) -> Result<Self, axum::http::header::InvalidHeaderValue> {
+        let realm = realm.replace('\\', "\\\\").replace('"', "\\\"");
+        HeaderValue::from_str(&format!("Basic realm=\"{realm}\"")).map(Self)
+    }
+}
 
 /// Standard application error that can be returned directly from an Scafra
 /// route handler. Internal failures log a safe classification, while HTTP
@@ -25,7 +48,8 @@ pub enum AppError {
     PublicValidation(String),
 
     #[error("authentication required")]
-    Unauthorized,
+    /// A genuine authentication failure with its explicitly applicable scheme.
+    Unauthorized(AuthenticationChallenge),
 
     #[error("access denied")]
     Forbidden,
@@ -53,7 +77,11 @@ impl IntoResponse for AppError {
             Self::NotFound => HttpError::NotFound,
             Self::Validation(_) => HttpError::Validation,
             Self::PublicValidation(message) => HttpError::PublicValidation(message),
-            Self::Unauthorized => HttpError::Unauthorized,
+            Self::Unauthorized(challenge) => {
+                let mut response = error_response(HttpError::Unauthorized);
+                response.headers_mut().insert(WWW_AUTHENTICATE, challenge.0);
+                return response;
+            }
             Self::Forbidden => HttpError::Forbidden,
             Self::Internal(_) => {
                 scafra_foundation::error!(

@@ -107,7 +107,7 @@ async fn unavailable_verifier_never_falls_back_to_static_bearer_or_basic() {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
 
@@ -129,7 +129,7 @@ async fn disabled_global_security_cannot_hide_unavailable_jwt_in_direct_layer() 
         .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test]
@@ -151,7 +151,7 @@ async fn protected_metadata_requires_credentials_with_global_security_disabled()
         .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test]
@@ -287,7 +287,7 @@ async fn duplicate_policy_records_deny_in_both_orders() {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
 
@@ -315,7 +315,7 @@ async fn contradictory_public_requirements_do_not_disable_enforcement() {
             .await
             .unwrap()
             .status(),
-        StatusCode::UNAUTHORIZED
+        StatusCode::INTERNAL_SERVER_ERROR
     );
 }
 

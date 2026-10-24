@@ -35,7 +35,7 @@ pub mod __private {
     pub use inventory;
 }
 
-pub use errors::{AppError, ServerError, WebError};
+pub use errors::{AppError, AuthenticationChallenge, ServerError, WebError};
 pub use json::JsonBody;
 pub use registration::{ControllerPrefix, ControllerRegistration, ControllerRoutes, RouteMetadata};
 pub use routing::{

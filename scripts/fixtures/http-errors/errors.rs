@@ -21,6 +21,10 @@ impl Errors {
     pub async fn failure(&self, case: Path<String>) -> scafra::Result<&'static str> {
         Err(match case.0.as_str() {
             "not-found" => AppError::NotFound,
+            "unauthorized" => AppError::Unauthorized(AuthenticationChallenge::bearer()),
+            "basic" => AppError::Unauthorized(
+                AuthenticationChallenge::basic("Orders").map_err(AppError::internal)?,
+            ),
             "validation" => AppError::Validation("issue12-private-database://password/path".into()),
             _ => AppError::internal(std::io::Error::other(
                 "issue12-private-database://password/path",

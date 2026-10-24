@@ -26,7 +26,8 @@ processing timeouts replace previously empty bodies.
 | Missing/unsupported JSON content type | 415 | `unsupported_media_type` | JSON | application/json |
 | JSON extractor body limit | 413 | `payload_too_large` | JSON | application/json |
 | Body stream/buffering failure | 500 | `internal_error` | JSON | application/json |
-| Authentication rejected | 401 | `unauthorized` | empty | application/json; configured challenges retained |
+| Authentication rejected (configured/app-declared scheme) | 401 | `unauthorized` | empty | application/json; applicable challenge required |
+| Missing/disabled/invalid security setup or invalid policy | 500 | `internal_error` | sometimes challenge-less 401 | application/json, no invented challenge; known concealment still empty404 |
 | Authenticated, missing role/scope | 403 | `forbidden` | empty | application/json |
 | Hidden denial | 404 | none | empty | empty, no challenge or media type |
 | Internal application failure | 500 | `internal_error` | JSON | application/json |
@@ -116,18 +117,56 @@ Security middleware returns 401 for missing, invalid or expired credentials and
 403 for an authenticated principal lacking roles/scopes. These are independent
 of response serialization: the route-local enforcement and managed/finalized
 router model are unchanged. Invalid security configuration still fails closed;
-standard startup rejects it before serving. Direct guard calls without a context
-also deny access, without inventing a scheme.
+standard startup rejects it before serving. Direct guards without an installed
+context, explicitly protected routes with disabled security, invalid policies,
+and invalid security configurations return a safe 500 `internal_error`. These
+are server setup failures, not credential rejections. A known `hide_unauthorized`
+setting retains empty 404 concealment even for setup failures. Without a context,
+no concealment configuration or authentication scheme is guessed.
 
 A middleware 401 advertises Bearer when JWT/shared bearer is configured and
 `Basic realm="Scafra"` when both Basic fields are configured. Both configured
 schemes produce separate `WWW-Authenticate` fields. A 403 has no challenge.
 The challenge is HTTP authentication metadata as specified by
 [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-11.6.1).
-`AppError::Unauthorized` alone has no access to authentication configuration:
-application-owned authentication must attach its configured challenge using
-Axum response headers. It must not invent a scheme. Middleware normally owns
-this boundary for protected Scafra controllers.
+Every supported Scafra-owned 401 includes an applicable challenge. An
+application-owned authentication error must carry that choice explicitly:
+
+```rust
+use scafra::{AppError, AuthenticationChallenge};
+
+fn authentication_failed() -> AppError {
+    // Select Bearer only when the application's own authenticator implements it.
+    AppError::Unauthorized(AuthenticationChallenge::bearer())
+}
+```
+
+A public generated controller can return `Err(authentication_failed())` through
+`scafra::Result<T>`. This works with web alone, direct Axum routers and finalized
+routers; no security context lookup or response-rewriting middleware is involved.
+Basic uses `AuthenticationChallenge::basic("Orders")`, returning a `Result` whose
+error is Axum's `http::header::InvalidHeaderValue`. Validate configured realms at
+startup: quotes/backslashes are escaped and invalid header bytes (including
+CR/LF) are rejected. Challenge constructors neither install nor enable an
+authenticator. Never use credentials or untrusted request data as a realm.
+These two constructors cover Scafra's supported schemes. Applications using
+custom authentication schemes can implement ordinary Axum `IntoResponse` with
+their own applicable, validated challenge.
+
+For example, the Bearer failure is:
+
+```http
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+WWW-Authenticate: Bearer
+
+{"code":"unauthorized","message":"authentication required"}
+```
+
+A HEAD request carries the same status and challenge with no body. The neutral
+foundation `HttpError` is a serializable payload/classification, not a complete
+HTTP authentication response; application-owned raw Axum responses must still
+satisfy HTTP semantics. Scafra does not rewrite arbitrary application responses.
 
 `hide_unauthorized` suppresses both denials to empty 404 without challenge,
 code or authentication explanation. It preserves the existing concealment
@@ -138,7 +177,9 @@ Content-Length metadata. Scafra's HTTP/1 server normalizes empty responses on th
 wire; tests compare full headers except Date. Custom embedding (including HTTP/2)
 must assess its own fallback/header alignment.
 Actuator has independent Bearer access control and now returns the same 401
-payload with its own challenge. A valid unhealthy/readiness 503 remains a health
+payload with its own challenge. Missing or blank actuator credentials in the
+server configuration instead return a safe 500 on direct router use (standard
+startup rejects that configuration). A valid unhealthy/readiness 503 remains a health
 document. BootUI content and access control are unchanged.
 
 Internal application context is retained in `AppError::Internal(String)` or
@@ -176,6 +217,15 @@ The workspace is still 0.1.0. This implementation does not declare the proposed
 [API stability policy](api-stability.md) approved or claim a shipped 1.0 contract.
 
 - Existing application/JSON `code`/`message` fields and media type remain intact.
+- The protocol correction changes the unit variant `AppError::Unauthorized` to
+  `AppError::Unauthorized(AuthenticationChallenge)`. Supply `bearer()` or a
+  validated `basic(realm)` for the scheme actually implemented. Update patterns
+  to `AppError::Unauthorized(_)`. Existing web/facade/prelude paths export the
+  challenge type with the same `web` feature boundary.
+- Direct security setup failures (including invalid actuator token configuration)
+  now return 500 `internal_error` instead of 401 `unauthorized`. They remain
+  fail-closed; genuine missing/invalid/expired credentials retain 401 with their
+  configured challenges, and role/scope denial retains 403.
 - `Validation(String)` now redacts its string. Replace deliberate safe messages
   with `AppError::public_validation("reviewed explanation")`.
 - `AppError` gains `Forbidden` and `PublicValidation`; exhaustive enum matches

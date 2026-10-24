@@ -68,7 +68,7 @@ pub fn context_layer(router: Router, config: SecurityConfig) -> Router {
             let context = context.install(&mut request);
             async move {
                 if context.0.invalid_configuration {
-                    return denied(&context.0, StatusCode::UNAUTHORIZED);
+                    return misconfigured(Some(&context.0));
                 }
                 next.run(request).await
             }
@@ -92,7 +92,7 @@ pub fn guard_axum_router(router: Router) -> Router {
     router.layer(axum::middleware::from_fn(
         |request: Request<axum::body::Body>, next| async move {
             if request.extensions().get::<SecurityContext>().is_none() {
-                return error_response(HttpError::Unauthorized);
+                return misconfigured(None);
             }
             authorize_route(request, next, INHERITED).await
         },
@@ -111,14 +111,14 @@ pub async fn authorize_route(
     let context = request.extensions().get::<SecurityContext>().cloned();
     if !valid_metadata(&metadata) {
         return context.map_or_else(
-            || error_response(HttpError::Unauthorized),
-            |context| denied(&context.0, StatusCode::UNAUTHORIZED),
+            || misconfigured(None),
+            |context| misconfigured(Some(&context.0)),
         );
     }
     let policy = resolve_policy(&metadata);
     let Some(context) = context else {
         return if policy.is_protected() {
-            error_response(HttpError::Unauthorized)
+            misconfigured(None)
         } else {
             next.run(request).await
         };
@@ -156,7 +156,7 @@ pub fn layer_with_route_policies(
             let policies = Arc::clone(&policies);
             async move {
                 if invalid_policies {
-                    return denied(&context.0, StatusCode::UNAUTHORIZED);
+                    return misconfigured(Some(&context.0));
                 }
                 if !context.0.invalid_configuration
                     && !context.0.config.enabled
@@ -199,7 +199,7 @@ async fn enforce(
 ) -> Response {
     let state = &context.0;
     if state.invalid_configuration {
-        return denied(state, StatusCode::UNAUTHORIZED);
+        return misconfigured(Some(state));
     }
     if policy.is_some_and(ResolvedPolicy::is_public) {
         return next.run(request).await;
@@ -215,7 +215,7 @@ async fn enforce(
     }
     // Disabled security cannot authenticate explicitly protected routes.
     if !state.config.enabled {
-        return denied(state, StatusCode::UNAUTHORIZED);
+        return misconfigured(Some(state));
     }
     let cached = request
         .extensions()
@@ -287,9 +287,26 @@ fn denied(state: &SecurityState, status: StatusCode) -> Response {
                 axum::http::HeaderValue::from_static("Basic realm=\"Scafra\""),
             );
         }
+        if !response
+            .headers()
+            .contains_key(axum::http::header::WWW_AUTHENTICATE)
+        {
+            return misconfigured(Some(state));
+        }
         response
     } else {
         error_response(HttpError::Forbidden)
+    }
+}
+
+// Server-side security setup failures cannot be corrected by client credentials.
+// Preserve concealment when its configuration is available, otherwise fail closed
+// without issuing a 401 or advertising an authenticator that does not exist.
+fn misconfigured(state: Option<&SecurityState>) -> Response {
+    if state.is_some_and(|state| state.config.hide_unauthorized) {
+        StatusCode::NOT_FOUND.into_response()
+    } else {
+        error_response(HttpError::Internal)
     }
 }
 

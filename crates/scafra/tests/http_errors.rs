@@ -40,7 +40,7 @@ impl Errors {
         Err(match case.0.as_str() {
             "absent" => AppError::NotFound,
             "validation" => AppError::Validation(SECRET.into()),
-            "unauthorized" => AppError::Unauthorized,
+            "unauthorized" => AppError::Unauthorized(AuthenticationChallenge::bearer()),
             "forbidden" => AppError::Forbidden,
             _ => AppError::internal(io::Error::other(SECRET)),
         })
@@ -598,4 +598,46 @@ mod security {
             assert!(!logs.contains(secret));
         }
     }
+}
+
+#[tokio::test]
+async fn public_generated_authentication_error_requires_a_challenge() {
+    let response = app(None)
+        .oneshot(
+            Request::get("/errors/unauthorized")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let challenge = response.headers().get("www-authenticate").cloned();
+    assert_error(
+        response,
+        StatusCode::UNAUTHORIZED,
+        "unauthorized",
+        "authentication required",
+    )
+    .await;
+    assert_eq!(challenge.unwrap(), "Bearer");
+}
+
+#[tokio::test]
+async fn public_generated_authentication_failure_preserves_head_headers_without_a_body() {
+    let response = app(None)
+        .oneshot(
+            Request::builder()
+                .method(Method::HEAD)
+                .uri("/errors/unauthorized")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.headers()["www-authenticate"], "Bearer");
+    assert_eq!(response.headers()["content-type"], "application/json");
+    assert!(to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap()
+        .is_empty());
 }

@@ -437,3 +437,36 @@ async fn request_deadline_wins_when_handler_and_timeout_become_ready_together() 
         .unwrap();
     assert_eq!(response.status(), axum::http::StatusCode::GATEWAY_TIMEOUT);
 }
+
+#[tokio::test]
+async fn direct_application_authentication_error_requires_a_challenge() {
+    use axum::response::IntoResponse;
+    let response = AppError::Unauthorized(crate::AuthenticationChallenge::bearer()).into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+    assert_eq!(response.headers()["content-type"], "application/json");
+    let challenge = response.headers().get("www-authenticate").cloned();
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
+    assert_eq!(
+        body.as_ref(),
+        br#"{"code":"unauthorized","message":"authentication required"}"#
+    );
+    assert_eq!(challenge.unwrap(), "Bearer");
+}
+
+#[test]
+fn basic_challenges_quote_realms_and_reject_header_injection() {
+    use crate::AuthenticationChallenge;
+    use axum::response::IntoResponse;
+    let challenge = AuthenticationChallenge::basic("orders \\\"private").unwrap();
+    let response = AppError::Unauthorized(challenge).into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        response.headers()["www-authenticate"],
+        "Basic realm=\"orders \\\\\\\"private\""
+    );
+    for realm in ["private\r\nX-Injected: secret", "private\n", "secret\0"] {
+        assert!(AuthenticationChallenge::basic(realm).is_err());
+    }
+}
