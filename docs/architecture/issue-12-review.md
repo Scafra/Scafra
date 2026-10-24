@@ -1,12 +1,12 @@
 # Issue #12 implementation review
 
-Status: **BLOCKED** on fresh authorization for the external consumer/negative
-verification suites. The confirmed 401 defect is corrected. All seven standard
-workspace checks, requested focused checks, Rust 1.88 check, two live generated
-application variants and independent targeted review checks have passed on the
-correction. No known source defect remains, but final verification is incomplete.
-Historical verification below is not reused as proof of the corrected tree;
-the final protocol section records the current results and remaining gate.
+Status: **READY FOR MERGE REVIEW**. The standalone 401 challenge defect is
+corrected and all required local checks have passed, including fresh Rust 1.88.0
+isolated consumer and negative suites against the corrected current tree at
+`5002e4558a2bca6b28609846121213388d1a74a9` plus the preserved local startup-banner
+text edit. All 20 acceptance criteria are PASS. Hosted CI and maintainer approval
+remain separate; this is not authorization to merge or publish. The final protocol
+section distinguishes current verification from initial historical results.
 
 ## Architecture decision
 
@@ -373,15 +373,15 @@ compatibility is made.
 | Minimal web-only dependency isolation | PASS | MSRV isolated normal tree excludes optional modules/security clients |
 | Public API and migration documentation | PASS | canonical guide, upgrading, policy inventory and this review |
 | Unit tests pass | PASS | default/all-feature workspace and focused tests |
-| Integration tests pass | PARTIAL | current workspace, protocol matrix and live web/standard pass; existing isolated/negative suites need fresh authorization for this correction |
+| Integration tests pass | PASS | current workspace/protocol/live checks plus fresh Rust1.88 corrected-tree suites: 16 consumers and 9 negative cases pass |
 | Actual generated application over HTTP | PASS | six isolated feature consumers, macro main/discovery, bounded SIGTERM |
 | Security redaction regressions | PASS | captured TRACE/body sentinels, existing config/JWT/JWKS tests and live logs |
 | Rust 1.88 compatibility | PASS | locked all-feature workspace, controller tests and standalone web live consumer |
 | Documentation matches implementation | PASS | response bytes/mappings and compiled equivalent controller/conversion examples; README timeout corrected |
-| No relevant regression unresolved | PARTIAL | no known source defect after independent review and current local tests; final clearance awaits fresh existing isolated/negative verification |
+| No relevant regression unresolved | PASS | independent review found no remaining defect; all required corrected-tree checks, final external suites and affected reruns pass |
 
-Initial local assessment was READY FOR PR REVIEW; it is superseded by the
-confirmed 401 protocol finding above.
+Initial local assessment was superseded by the 401 protocol finding. The
+correction and fresh verification below now establish READY FOR MERGE REVIEW.
 Hosted CI and maintainer review remain separate from local completion; this is
 not authorization to merge, publish, or close the issue.
 
@@ -560,20 +560,124 @@ contradictory metadata and known hidden invalid configuration. Assertions requir
 generic JSON500 without challenge or leaked sentinel/private handler data, or an
 empty404 for concealment. Read and shutdown operations have five-second bounds.
 
-Fresh external suite commands are **NOT RUN (BLOCKED)**. They reject checkout-local
-outputs. Because this corrective assignment explicitly says not to assume prior
-authorization covers new external paths, fresh approval was requested for newly
-created `/var/tmp/scafra-issue12-protocol-*` directories. No answer has been
-received, and no new external path was written during this corrective review.
-After approval, rerun both `scripts/arch103-consumers.py --runtime` and
-`scripts/arch103-negative.py` on Rust 1.88.0, preserving their results under that
-new prefix. Prior 16/16 and 9/9 results above remain historical evidence for the
-initial implementation, not current verification of this correction.
+### Fresh authorized verification — PASSED
 
-The 20 acceptance criteria were reassessed: 18 PASS and two PARTIAL (integration
-coverage/final regression clearance pending the fresh suites). Standalone public
-authentication compliance itself is PASS, with the root cause fixed and tested;
-there is no assertion that an incomplete review has all 20 PASS. Final status is
-**BLOCKED** on the verification permission gate, rather than READY FOR MERGE REVIEW.
-Hosted CI and maintainer approval remain separate. No commit, push, merge, PR
-creation, package publication or issue closure was performed.
+The user explicitly authorized newly created `/var/tmp/scafra-issue12-protocol-*`
+directories for this corrective verification. Both existing suites were run with
+Rust 1.88.0 against the corrected branch, without modifying AGENTS.md, weakening
+assertions or reusing historical results as proof of the correction.
+
+The current corrected commit is `5002e4558a2bca6b28609846121213388d1a74a9`.
+The checkout was clean when this verification started. During the first suite run,
+an unrelated local startup-banner text change appeared in
+`crates/scafra/src/startup.rs`. It was preserved without alteration. Both suites
+were then repeated against a fresh snapshot containing that edit, with fresh
+output directories and the same related build cache. Input SHA-256 manifests
+confirm no source, tests, fixtures or manifests changed during the final run.
+Only this report was subsequently updated by the verification agent.
+
+Preserved artifact roots (both newly created under the approved prefix):
+
+- Initial authorized run: `/var/tmp/scafra-issue12-protocol-pde9xxmi`.
+- Final current-tree run: `/var/tmp/scafra-issue12-protocol-hevtahsr`.
+
+Exact final commands:
+
+```bash
+RUSTUP_TOOLCHAIN=1.88.0 TMPDIR=/var/tmp/scafra-issue12-protocol-hevtahsr/tmp python3 scripts/arch103-consumers.py /var/tmp/scafra-issue12-protocol-hevtahsr/consumers --runtime --timeout 600 --target-dir /var/tmp/scafra-issue12-protocol-pde9xxmi/target
+RUSTUP_TOOLCHAIN=1.88.0 TMPDIR=/var/tmp/scafra-issue12-protocol-hevtahsr/tmp python3 scripts/arch103-negative.py --output /var/tmp/scafra-issue12-protocol-hevtahsr/negatives --target-dir /var/tmp/scafra-issue12-protocol-pde9xxmi/target --timeout 600
+```
+
+| Final corrected-tree suite | Result | Exit | Duration |
+| --- | --- | --- | --- |
+| Isolated consumers with runtime | PASSED, 16/16 cases | 0 | 27.80 seconds |
+| Negative verification | PASSED, 9/9 cases | 0 | 10.99 seconds |
+
+The initial authorized runs also passed (16/16 and 9/9; 88.19 and 31.89 seconds),
+but final readiness uses the repeated current-tree results. Every consumer passed
+lock generation, compilation, forbidden-normal-dependency assertions and its
+applicable runtime checks. Cases: minimal, config, core, foundation, web,
+secure-web, inventory, jwt, nested, jwks, actuator, scheduler, default, standard,
+bootui and all. Runtime checks include actual loopback requests, nested and
+prefinalized policies, public overrides, role/scope denials, invalid JWT signatures,
+legacy inventory adapters, independent actuator guards, readiness rejection,
+BootUI redaction, resource cleanup and bounded shutdown where applicable.
+
+All nine negative cases passed: missing-web main/controller diagnostics,
+protected and supplied-router fail-closed behavior, both managed-resource
+ownership boundaries, unavailable unified-subcrate capabilities, prevention of
+accidental facade JWT enablement by unified JWKS, and additive helper feature
+forwarding. Expected nonzero compiler/process exits are checked rejection
+results. Invalid startup cases exposed no listener; resource cleanup matched its
+assertions. No unexpected suite failure or security source fix was required.
+
+Final-root evidence:
+
+- `suite-results.json`: exact suite commands, toolchain, exit codes and durations.
+- `consumers-suite.log`, `consumers/results.json` and per-case build/tree/runtime logs.
+- `negatives-suite.log`, `negatives/results.json`, `negatives/environment.json` and
+  per-case compiler/runtime logs.
+- `working-tree.json`: current commit, branch/status and per-file SHA-256 snapshot.
+- `startup-banner.diff`: preserved unrelated local text edit used by the final run.
+- `confirmation-results.json` and `confirmation-*.log`: focused MSRV tests and tooling.
+- `affected-results.json` and `affected-*.log`: affected checks after the banner edit.
+- `final-integrity.json`: final source-integrity and acceptance-criteria audit.
+
+The initial root also preserves `prior-workspace-checks/results.json` and copied
+logs for all seven standard workspace checks and requested focused checks from
+the correction. These have all passed, as recorded above. They are distinguished
+from the affected reruns performed after the unrelated banner text edit.
+
+Additional current-tree confirmations (all returned exit code 0):
+
+| Command | Result |
+| --- | --- |
+| `cargo +1.88.0 test -p scafra --features standard --test http_errors --locked` | PASSED, 8 tests |
+| `cargo +1.88.0 test -p scafra-security --all-features --test route_local --test middleware --locked` | PASSED, including real HTTP setup-failure and HEAD checks |
+| `cargo test -p scafra --all-features --locked` | PASSED, affected facade regressions |
+| `cargo check --workspace --locked` | PASSED |
+| `cargo check --workspace --all-features --locked` | PASSED |
+| `cargo clippy --workspace --all-targets -- -D warnings` | PASSED |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASSED |
+| `cargo +1.88.0 check --workspace --all-features --locked` | PASSED |
+| `cargo +stable fmt --all -- --check` | PASSED |
+| `python3 scripts/check-api-policy.py` | PASSED |
+| `git diff --check` | PASSED |
+
+One optional confirmation command inherited `RUSTUP_TOOLCHAIN=1.88.0` for
+`cargo fmt --all -- --check` and exited 1 because that toolchain has no installed
+`cargo-fmt` component. This is a tooling availability failure, not a formatting
+or compilation defect. Its complete log is preserved at
+`/var/tmp/scafra-issue12-protocol-pde9xxmi/confirmation-02.log`. Formatting was
+rerun successfully using the already installed stable formatter; all compiler
+and runtime MSRV checks used Rust 1.88.0. No unrelated toolchain installation was
+performed or required. The unsuccessful invocation remains recorded rather than
+being relabeled as a pass.
+
+### Final security and compatibility assessment
+
+Every supported Scafra-owned 401 construction now has an applicable challenge:
+application errors carry a typed explicit choice, configured middleware uses its
+actual schemes, and independent actuator authentication uses its Bearer scheme.
+Header-safe Basic realm construction escapes quotes/backslashes and rejects
+CR/LF. Missing/disabled/invalid server security setup returns a generic500 rather
+than fabricating a challenge or granting access; known hidden settings retain
+empty404. Valid credentials still require all declared roles/scopes and produce
+403 without challenges on denial. GET/HEAD behavior, redaction, managed/nested
+routing, inventory adapters, health documents, 504 timeouts and Axum interop have
+passed their regressions. No remaining confirmed security/protocol defect is known.
+
+Compatibility impact is deliberate and documented before 1.0: applications must
+supply `AuthenticationChallenge` to `AppError::Unauthorized` and match it as
+`Unauthorized(_)`. Invalid direct security setup now has 500/internal_error
+semantics. Genuine authentication failure keeps 401/unauthorized, the existing
+JSON and the applicable challenge. The shared `{code,message}` format, optional
+features, dependency boundaries and versions remain unchanged. New consumer
+results confirm the web-only boundary and supported feature union behavior.
+
+All 20 issue #12 acceptance criteria were reassessed and are PASS. Final local
+status: **READY FOR MERGE REVIEW**. All required local checks have passed; hosted
+CI and maintainer approval remain separate. No commit, push, merge, PR creation,
+publication or issue closure was performed by the verification agent. Issue #19
+resource-limit policy and previously documented custom-embedding limitations
+remain out of scope, not unresolved defects in this correction.
