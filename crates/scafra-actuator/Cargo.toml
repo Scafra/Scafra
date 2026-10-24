@@ -8,6 +8,7 @@ rust-version.workspace = true
 description = "Spring Boot-style operational endpoints for Scafra"
 
 [dependencies]
+scafra-foundation.workspace = true
 axum.workspace = true
 inventory.workspace = true
 serde.workspace = true

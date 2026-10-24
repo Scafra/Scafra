@@ -76,7 +76,7 @@ async fn nested_handler_roles_do_not_disappear_after_authentication() {
 async fn guard_without_context_or_with_disabled_context_fails_closed() {
     assert_eq!(
         status(guarded(ADMIN), "/protected/", Some("Bearer valid")).await,
-        StatusCode::UNAUTHORIZED
+        StatusCode::INTERNAL_SERVER_ERROR
     );
     assert_eq!(
         status(
@@ -85,7 +85,7 @@ async fn guard_without_context_or_with_disabled_context_fails_closed() {
             Some("Bearer valid")
         )
         .await,
-        StatusCode::UNAUTHORIZED
+        StatusCode::INTERNAL_SERVER_ERROR
     );
 }
 
@@ -112,7 +112,7 @@ async fn nested_public_override_and_invalid_metadata() {
             Some("Bearer valid")
         )
         .await,
-        StatusCode::UNAUTHORIZED
+        StatusCode::INTERNAL_SERVER_ERROR
     );
 }
 
@@ -296,7 +296,7 @@ async fn explicit_handwritten_guard_requires_an_installed_context() {
     let router = guard_axum_router(Router::new().route("/handwritten", get(|| async { "ok" })));
     assert_eq!(
         status(router, "/handwritten", None).await,
-        StatusCode::UNAUTHORIZED
+        StatusCode::INTERNAL_SERVER_ERROR
     );
 }
 
@@ -374,5 +374,113 @@ async fn explicit_head_and_get_keep_independent_local_policies() {
                 .unwrap();
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
         }
+    }
+}
+
+#[tokio::test]
+async fn missing_security_context_is_a_server_failure_not_challengeless_authentication() {
+    for router in [
+        guarded(ADMIN),
+        guard_axum_router(Router::new().route("/protected/", get(|| async { "private" }))),
+    ] {
+        let response = router
+            .oneshot(Request::get("/protected/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(!response.headers().contains_key("www-authenticate"));
+    }
+}
+
+#[tokio::test]
+async fn security_setup_failures_are_protocol_correct_over_http() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let invalid = SecurityConfig {
+        enabled: true,
+        ..Default::default()
+    };
+    let hidden_invalid = SecurityConfig {
+        hide_unauthorized: true,
+        ..invalid.clone()
+    };
+    let contradictory = RouteAuthorizationMetadata {
+        route_policy: AuthorizationPolicy {
+            role_groups: &[&["private-role-sentinel"]],
+            ..AuthorizationPolicy::public()
+        },
+        ..ADMIN
+    };
+    for (router, expected) in [
+        (guarded(ADMIN), 500),
+        (
+            guard_axum_router(
+                Router::new().route("/protected/", get(|| async { "must not execute" })),
+            ),
+            500,
+        ),
+        (context_layer(guarded(ADMIN), invalid.clone()), 500),
+        (
+            layer_with_route_policies(guarded(ADMIN), invalid, vec![ADMIN]),
+            500,
+        ),
+        (
+            context_layer(guarded(ADMIN), SecurityConfig::default()),
+            500,
+        ),
+        (
+            context_layer(guarded(contradictory), bearer("config-secret-sentinel")),
+            500,
+        ),
+        (context_layer(guarded(ADMIN), hidden_invalid), 404),
+    ] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (shutdown, receiver) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = receiver.await;
+                })
+                .await
+                .unwrap();
+        });
+        for method in ["GET", "HEAD"] {
+            let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+            stream.write_all(format!("{method} /protected/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                stream.read_to_end(&mut response),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            let text = String::from_utf8(response).unwrap();
+            let (headers, body) = text.split_once("\r\n\r\n").unwrap();
+            assert!(
+                headers.starts_with(&format!("HTTP/1.1 {expected}")),
+                "{text}"
+            );
+            assert!(
+                !headers.to_ascii_lowercase().contains("www-authenticate"),
+                "{text}"
+            );
+            assert!(!text.contains("sentinel"), "{text}");
+            assert!(!text.contains("must not execute"));
+            if method == "HEAD" || expected == 404 {
+                assert!(body.is_empty(), "{text}");
+            } else {
+                assert!(headers.contains("content-type: application/json"));
+                assert_eq!(
+                    body,
+                    r#"{"code":"internal_error","message":"internal server error"}"#
+                );
+            }
+        }
+        shutdown.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

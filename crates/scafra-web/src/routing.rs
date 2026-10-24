@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use axum::{extract::DefaultBodyLimit, http::StatusCode, Router};
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use axum::{extract::DefaultBodyLimit, Router};
+use tower_http::trace::TraceLayer;
 
 use crate::{errors::WebError, registration::ControllerRegistration};
 #[cfg(feature = "actuator")]
@@ -110,10 +110,11 @@ pub async fn authorize_route(
     }
     #[cfg(not(feature = "security"))]
     {
-        use axum::response::IntoResponse;
         if validate_authorization_metadata(&[policy]).is_err() || policy_requires_security(&policy)
         {
-            return StatusCode::UNAUTHORIZED.into_response();
+            return crate::errors::error_response(
+                scafra_foundation::http_error::HttpError::Internal,
+            );
         }
         next.run(request).await
     }
@@ -499,9 +500,18 @@ pub fn default_controller_metadata(
 
 pub(crate) fn with_request_timeout(router: Router, request_timeout: Option<Duration>) -> Router {
     match request_timeout {
-        Some(timeout) => router.layer(TimeoutLayer::with_status_code(
-            StatusCode::GATEWAY_TIMEOUT,
-            timeout,
+        Some(timeout) => router.layer(axum::middleware::from_fn(
+            move |request: axum::extract::Request, next: axum::middleware::Next| async move {
+                // Preserve Tower's timeout-first ordering when both futures
+                // become ready on the same poll.
+                tokio::select! {
+                    biased;
+                    _ = tokio::time::sleep(timeout) => crate::errors::error_response(
+                        scafra_foundation::http_error::HttpError::RequestTimeout,
+                    ),
+                    response = next.run(request) => response,
+                }
+            },
         )),
         None => router,
     }

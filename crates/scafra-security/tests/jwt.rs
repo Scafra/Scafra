@@ -162,7 +162,7 @@ async fn direct_middleware_rejects_invalid_jwt_configuration() {
     );
 
     let (status, body) = send(&router, Some(&empty_secret_token)).await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert!(!body.contains(&empty_secret_token));
 }
 

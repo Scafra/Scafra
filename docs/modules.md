@@ -1,5 +1,9 @@
 # Modular Scafra and migration
 
+The shared [HTTP error contract](http-errors.md) preserves optional module
+boundaries: foundation supplies a dependency-neutral payload/status mapping;
+web, security and actuator adapt it to Axum independently.
+
 Scafra uses one workspace, independently published Cargo crates, and explicit
 facade features. Default features are empty. These APIs are implemented at the
 current workspace version `0.1.0`; the architecture targets 1.0 without claiming

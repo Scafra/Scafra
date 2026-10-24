@@ -118,3 +118,27 @@ body handler. Read their migration notes when completed and retest configuration
 router construction and error handling. #15/#33/#42 supply published-template,
 compiler/target and RC/upgrade evidence before the final 1.0 inventory is frozen.
 See the [candidate freeze gates](api-stability.md#candidate-freeze-gates-and-classification-exceptions).
+
+## HTTP error contract before 1.0
+
+Issue #12 retains `{code,message}` and `application/json`, and extends it to
+visible authentication/authorization denials, actuator authentication, and
+processing timeouts. Hidden 404, native Axum fallbacks/extractors and health
+documents retain their existing behavior. `AppError::Validation(String)` now
+redacts its string; use `AppError::public_validation("reviewed safe message")`
+for deliberate public text. Exhaustive AppError matches must handle the new
+`Forbidden` and `PublicValidation` variants. See [HTTP errors](http-errors.md)
+for the status matrix, challenges, application-owned error conversions and
+wire-format migration details.
+
+The final HTTP protocol correction requires a challenge payload on the existing
+variant: replace `AppError::Unauthorized` with
+`AppError::Unauthorized(AuthenticationChallenge::bearer())` for an actual Bearer
+authenticator, or use the fallible `AuthenticationChallenge::basic(realm)` for
+Basic. `AuthenticationChallenge` is exported with `AppError` through web, facade,
+and prelude. Match the variant as `Unauthorized(_)`. Invalid/missing/disabled
+security context or invalid authorization metadata now produces a generic 500
+instead of a credential-oriented 401; standard startup validation and known
+hidden404 behavior remain intact. This is a deliberate pre-1.0 Rust/wire behavior
+correction. All valid authentication 401s keep the `unauthorized` classification,
+existing JSON and applicable challenges.
