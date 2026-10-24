@@ -1,5 +1,8 @@
 # HTTP authentication and authorization
 
+See [HTTP API errors](http-errors.md) for authentication/authorization JSON,
+configured challenges, hidden-denial privacy, and redaction.
+
 ## Required Cargo capabilities
 
 Select `security` for Basic/static bearer, `jwt` for local token verification,

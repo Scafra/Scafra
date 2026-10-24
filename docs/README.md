@@ -1,5 +1,7 @@
 # Scafra documentation
 
+- [HTTP API errors](http-errors.md) — typed errors, JSON contract, redaction and migration.
+
 Welcome to the Scafra documentation. Scafra is a batteries-included web
 application framework for Rust built on familiar ecosystem crates such as
 Axum, Tokio, Tower, Serde, and `tracing`.

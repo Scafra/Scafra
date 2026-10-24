@@ -73,6 +73,10 @@ async fn request(
         .await
         .expect("router should respond");
     let status = response.status();
+    if status == StatusCode::UNAUTHORIZED {
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(response.headers()["www-authenticate"], "Bearer");
+    }
     let body = to_bytes(response.into_body(), 1024)
         .await
         .expect("response body should be readable");
@@ -120,7 +124,10 @@ async fn protected_routes_reject_missing_malformed_and_incorrect_credentials_bef
         ] {
             let (status, body) = request(&router, path, authorization).await;
             assert_eq!(status, StatusCode::UNAUTHORIZED, "{path}");
-            assert!(body.is_empty(), "unauthorized response should be empty");
+            assert_eq!(
+                body,
+                r#"{"code":"unauthorized","message":"authentication required"}"#
+            );
             assert!(
                 !body.contains(TOKEN),
                 "unauthorized response exposed a token"
@@ -149,7 +156,10 @@ async fn blank_configured_tokens_fail_closed_even_for_direct_router_construction
         for candidate in [None, Some(bearer("Bearer")), Some(bearer("Bearer  "))] {
             let (status, body) = request(&router, "/ready", candidate).await;
             assert_eq!(status, StatusCode::UNAUTHORIZED);
-            assert!(body.is_empty());
+            assert_eq!(
+                body,
+                r#"{"code":"unauthorized","message":"authentication required"}"#
+            );
         }
         assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
@@ -161,6 +171,31 @@ async fn enabled_security_without_a_configured_token_fails_closed() {
     let (status, body) =
         request(&router, "/health", Some(bearer(&format!("Bearer {TOKEN}")))).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert!(body.is_empty());
+    assert_eq!(
+        body,
+        r#"{"code":"unauthorized","message":"authentication required"}"#
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+}
+
+#[tokio::test]
+async fn duplicate_authorization_values_fail_closed() {
+    let (router, calls) = protected_router(Some(TOKEN));
+    let mut request = Request::get("/ready").body(Body::empty()).unwrap();
+    request
+        .headers_mut()
+        .append("authorization", bearer(&format!("Bearer {TOKEN}")));
+    request
+        .headers_mut()
+        .append("authorization", bearer("Bearer duplicate-secret"));
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.headers()["www-authenticate"], "Bearer");
+    assert_eq!(response.headers()["content-type"], "application/json");
+    let body = to_bytes(response.into_body(), 1024).await.unwrap();
+    assert_eq!(
+        body.as_ref(),
+        br#"{"code":"unauthorized","message":"authentication required"}"#
+    );
     assert_eq!(calls.load(Ordering::Relaxed), 0);
 }

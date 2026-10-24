@@ -781,7 +781,8 @@ loader, so custom applications should prefer the checked config-taking API.
 `server.timeout` (also `SCAFRA_SERVER_TIMEOUT`) sets an optional
 request-processing deadline in seconds. It must be greater than zero
 when set. When the deadline expires, Scafra cancels the in-flight request
-future and returns `504 Gateway Timeout` with an empty body. The deadline
+future and returns `504 Gateway Timeout` with the JSON error code
+`request_timeout` (see [HTTP API errors](docs/http-errors.md)). The deadline
 covers security middleware, request body extraction, and handler processing
 until the response is created. It does not cover establishing a connection or
 receiving request headers, and it ends when the handler returns the response;

@@ -30,6 +30,7 @@ tower-http.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 jsonwebtoken.workspace = true
 serde.workspace = true
 tracing-subscriber.workspace = true

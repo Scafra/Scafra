@@ -1,5 +1,9 @@
 # Getting started
 
+Return `scafra::Result<T>` or an application-owned Axum `IntoResponse` error from
+controllers. See [HTTP API errors](http-errors.md) for safe validation messages
+and the response contract.
+
 ## Capability selection
 
 Starters explicitly select `web` and disable Cargo defaults. To add capabilities

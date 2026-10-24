@@ -2,7 +2,8 @@ use axum::extract::{
     rejection::{BytesRejection, FailedToBufferBody, JsonRejection},
     FromRequest, Json,
 };
-use axum::{http::StatusCode, response::Response};
+use axum::response::Response;
+use scafra_foundation::http_error::HttpError;
 use serde::de::DeserializeOwned;
 
 use crate::errors::error_response;
@@ -47,54 +48,22 @@ where
 }
 
 fn json_rejection_response(rejection: JsonRejection) -> Response {
-    match rejection {
-        JsonRejection::JsonSyntaxError(_) => error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_json",
-            "invalid JSON request",
-        ),
-        JsonRejection::JsonDataError(_) => error_response(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "validation_error",
-            "request validation failed",
-        ),
-        JsonRejection::MissingJsonContentType(_) => error_response(
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "unsupported_media_type",
-            "content type must be application/json",
-        ),
+    let error = match rejection {
+        JsonRejection::JsonSyntaxError(_) => HttpError::InvalidJson,
+        JsonRejection::JsonDataError(_) => HttpError::InvalidJsonData,
+        JsonRejection::MissingJsonContentType(_) => HttpError::UnsupportedMediaType,
         JsonRejection::BytesRejection(BytesRejection::FailedToBufferBody(
             FailedToBufferBody::LengthLimitError(_),
-        )) => error_response(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "payload_too_large",
-            "request body too large",
-        ),
-        JsonRejection::BytesRejection(rejection) => match rejection {
-            BytesRejection::FailedToBufferBody(FailedToBufferBody::LengthLimitError(_)) => {
-                error_response(
-                    StatusCode::PAYLOAD_TOO_LARGE,
-                    "payload_too_large",
-                    "request body too large",
-                )
-            }
-            BytesRejection::FailedToBufferBody(FailedToBufferBody::UnknownBodyError(_)) => {
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal_error",
-                    "internal server error",
-                )
-            }
-            _ => error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "internal server error",
-            ),
-        },
-        _ => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "internal server error",
-        ),
-    }
+        )) => HttpError::PayloadTooLarge,
+        // Never format or log rejection sources: deserializers and body streams
+        // can include the request payload or sensitive transport diagnostics.
+        _ => {
+            scafra_foundation::error!(
+                error_kind = "request_body_error",
+                "request body could not be read"
+            );
+            HttpError::Internal
+        }
+    };
+    error_response(error)
 }

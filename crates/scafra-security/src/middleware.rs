@@ -16,6 +16,7 @@ use axum::{
     response::{IntoResponse, Response},
     Router,
 };
+use scafra_foundation::http_error::HttpError;
 use std::sync::Arc;
 
 /// Shared authentication configuration and verifier cache for one application.
@@ -91,7 +92,7 @@ pub fn guard_axum_router(router: Router) -> Router {
     router.layer(axum::middleware::from_fn(
         |request: Request<axum::body::Body>, next| async move {
             if request.extensions().get::<SecurityContext>().is_none() {
-                return StatusCode::UNAUTHORIZED.into_response();
+                return error_response(HttpError::Unauthorized);
             }
             authorize_route(request, next, INHERITED).await
         },
@@ -110,14 +111,14 @@ pub async fn authorize_route(
     let context = request.extensions().get::<SecurityContext>().cloned();
     if !valid_metadata(&metadata) {
         return context.map_or_else(
-            || StatusCode::UNAUTHORIZED.into_response(),
+            || error_response(HttpError::Unauthorized),
             |context| denied(&context.0, StatusCode::UNAUTHORIZED),
         );
     }
     let policy = resolve_policy(&metadata);
     let Some(context) = context else {
         return if policy.is_protected() {
-            StatusCode::UNAUTHORIZED.into_response()
+            error_response(HttpError::Unauthorized)
         } else {
             next.run(request).await
         };
@@ -272,13 +273,27 @@ fn denied(state: &SecurityState, status: StatusCode) -> Response {
     if state.config.hide_unauthorized {
         StatusCode::NOT_FOUND.into_response()
     } else if status == StatusCode::UNAUTHORIZED {
-        let challenge = if state.config.jwt.enabled || state.config.bearer_token.is_some() {
-            "Bearer"
-        } else {
-            "Basic realm=\"Scafra\""
-        };
-        (status, [("www-authenticate", challenge)]).into_response()
+        let mut response = error_response(HttpError::Unauthorized);
+        // Advertise only configured schemes, including both when supported.
+        if state.config.jwt.enabled || state.config.bearer_token.is_some() {
+            response.headers_mut().append(
+                axum::http::header::WWW_AUTHENTICATE,
+                axum::http::HeaderValue::from_static("Bearer"),
+            );
+        }
+        if state.config.basic.username.is_some() && state.config.basic.password.is_some() {
+            response.headers_mut().append(
+                axum::http::header::WWW_AUTHENTICATE,
+                axum::http::HeaderValue::from_static("Basic realm=\"Scafra\""),
+            );
+        }
+        response
     } else {
-        status.into_response()
+        error_response(HttpError::Forbidden)
     }
+}
+
+fn error_response(error: HttpError) -> Response {
+    let status = StatusCode::from_u16(error.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    (status, axum::Json(error)).into_response()
 }

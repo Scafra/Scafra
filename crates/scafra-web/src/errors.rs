@@ -4,28 +4,44 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use scafra_foundation::http_error::HttpError;
 use scafra_foundation::{capture_error_backtrace, ShutdownPolicy, ShutdownReason};
-use serde::Serialize;
 
 /// Standard application error that can be returned directly from an Scafra
-/// route handler. Internal details are traced, while the HTTP response keeps
-/// the public message deliberately small.
+/// route handler. Internal failures log a safe classification, while HTTP
+/// responses redact diagnostic context. Use [`Self::public_validation`] only
+/// for reviewed client-facing text.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("resource not found")]
     NotFound,
 
+    /// Internal context, redacted from Scafra HTTP responses and generated logs.
     #[error("validation failed: {0}")]
     Validation(String),
 
+    /// An intentionally public explanation; never include untrusted values.
+    #[error("{0}")]
+    PublicValidation(String),
+
     #[error("authentication required")]
     Unauthorized,
+
+    #[error("access denied")]
+    Forbidden,
 
     #[error("internal application error: {0}")]
     Internal(String),
 }
 
 impl AppError {
+    /// Creates an intentionally public validation explanation (HTTP 400).
+    /// Use fixed, reviewed text; raw deserializer errors belong in `Validation`.
+    pub fn public_validation(message: impl Into<String>) -> Self {
+        Self::PublicValidation(message.into())
+    }
+
+    /// Retains private diagnostic context without exposing it in HTTP or logs.
     pub fn internal(error: impl std::error::Error) -> Self {
         Self::Internal(error.to_string())
     }
@@ -33,51 +49,29 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, code, message) = match &self {
-            Self::NotFound => (StatusCode::NOT_FOUND, "not_found", self.to_string()),
-            Self::Validation(message) => {
-                (StatusCode::BAD_REQUEST, "validation_error", message.clone())
-            }
-            Self::Unauthorized => (
-                StatusCode::UNAUTHORIZED,
-                "unauthorized",
-                "authentication required".to_owned(),
-            ),
+        let error = match self {
+            Self::NotFound => HttpError::NotFound,
+            Self::Validation(_) => HttpError::Validation,
+            Self::PublicValidation(message) => HttpError::PublicValidation(message),
+            Self::Unauthorized => HttpError::Unauthorized,
+            Self::Forbidden => HttpError::Forbidden,
             Self::Internal(_) => {
                 scafra_foundation::error!(
                     error_kind = "internal_application_error",
                     backtrace = ?capture_error_backtrace(),
                     "request failed"
                 );
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal_error",
-                    "internal server error".to_owned(),
-                )
+                HttpError::Internal
             }
         };
-        error_response(status, code, message)
+        error_response(error)
     }
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
-    code: &'static str,
-    message: String,
-}
-
-pub(crate) fn error_response(
-    status: StatusCode,
-    code: &'static str,
-    message: impl Into<String>,
-) -> Response {
-    IntoResponse::into_response((
-        status,
-        axum::Json(ErrorResponse {
-            code,
-            message: message.into(),
-        }),
-    ))
+pub(crate) fn error_response(error: HttpError) -> Response {
+    // HttpError owns the status mapping; all values are valid HTTP statuses.
+    let status = StatusCode::from_u16(error.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    (status, axum::Json(error)).into_response()
 }
 
 #[derive(Debug, thiserror::Error)]

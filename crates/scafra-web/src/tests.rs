@@ -256,7 +256,10 @@ async fn request_processing_timeout_returns_gateway_timeout_without_details() {
 
     assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
     let body = to_bytes(response.into_body(), 1024).await.unwrap();
-    assert!(body.is_empty());
+    assert_eq!(
+        body.as_ref(),
+        br#"{"code":"request_timeout","message":"request processing timed out"}"#
+    );
 }
 
 #[tokio::test]
@@ -413,4 +416,24 @@ async fn active_requests_report_a_distinct_graceful_timeout() {
             policy,
         } if policy.grace_period() == Duration::from_millis(20)
     ));
+}
+
+#[tokio::test(start_paused = true)]
+async fn request_deadline_wins_when_handler_and_timeout_become_ready_together() {
+    let duration = Duration::from_secs(1);
+    let router = crate::routing::with_request_timeout(
+        Router::new().route(
+            "/probe",
+            get(move || async move {
+                tokio::time::sleep(duration).await;
+                "completed at deadline"
+            }),
+        ),
+        Some(duration),
+    );
+    let response = router
+        .oneshot(Request::get("/probe").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::GATEWAY_TIMEOUT);
 }

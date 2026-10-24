@@ -69,7 +69,7 @@ async fn configuration_child_process() {
                     config.security.bearer_token.as_deref(),
                     Some("config-resolution-secret")
                 );
-                assert!(config.bootui.enabled);
+                assert_eq!(config.bootui.enabled, cfg!(feature = "bootui"));
                 Ok(Router::new())
             })
             .await;
@@ -109,35 +109,73 @@ fn standard_startup_uses_explicit_configuration_outside_the_project_directory() 
         "scafra:\n  profiles:\n    active: base\nserver:\n  host: 127.0.0.1\n  port: 8080\nstartup:\n  banner: false\n",
     )
     .unwrap();
+    let bootui = if cfg!(feature = "bootui") {
+        "bootui:\n  enabled: true\n  host: 127.0.0.1\n  local_only: true\n"
+    } else {
+        ""
+    };
     fs::write(
         config_dir.join("application-production.yaml"),
-        "server:\n  timeout: 17\nsecurity:\n  enabled: true\n  bearer_token: config-resolution-secret\nbootui:\n  enabled: true\n  host: 127.0.0.1\n  local_only: true\n",
+        format!("server:\n  timeout: 17\nsecurity:\n  enabled: true\n  bearer_token: config-resolution-secret\n{bootui}"),
     )
     .unwrap();
     let (server_port, bootui_port) = unused_local_ports();
+    let server_port_value = server_port.to_string();
+    let bootui_port_value = bootui_port.to_string();
+    let mut variables = vec![
+        ("SCAFRA_CONFIG_DIR", config_dir.as_os_str()),
+        ("SCAFRA_PROFILE", "production".as_ref()),
+        ("SCAFRA_SERVER_PORT", server_port_value.as_ref()),
+        ("SCAFRA_STARTUP_BANNER", "false".as_ref()),
+    ];
+    if cfg!(feature = "bootui") {
+        variables.push(("SCAFRA_BOOTUI_PORT", bootui_port_value.as_ref()));
+    }
+    let mut child = spawn_child("startup", &unexpected_cwd, &variables);
 
-    let mut child = spawn_child(
-        "startup",
-        &unexpected_cwd,
-        &[
-            ("SCAFRA_CONFIG_DIR", config_dir.as_os_str()),
-            ("SCAFRA_PROFILE", "production".as_ref()),
-            ("SCAFRA_SERVER_PORT", server_port.to_string().as_ref()),
-            ("SCAFRA_BOOTUI_PORT", bootui_port.to_string().as_ref()),
-            ("SCAFRA_STARTUP_BANNER", "false".as_ref()),
-        ],
-    );
-
-    let snapshot = wait_for_bootui_snapshot(&mut child, bootui_port);
-    assert!(
-        snapshot.contains(&format!("\"port\":{server_port}")),
-        "{snapshot}"
-    );
-    assert!(
-        snapshot.contains("\"profile\":\"production\""),
-        "{snapshot}"
-    );
-    assert!(!snapshot.contains("config-resolution-secret"));
+    if cfg!(feature = "bootui") {
+        let snapshot = wait_for_bootui_snapshot(&mut child, bootui_port);
+        assert!(
+            snapshot.contains(&format!("\"port\":{server_port}")),
+            "{snapshot}"
+        );
+        assert!(
+            snapshot.contains("\"profile\":\"production\""),
+            "{snapshot}"
+        );
+        assert!(!snapshot.contains("config-resolution-secret"));
+    } else {
+        // The standard feature intentionally excludes BootUI. Verify the actual
+        // configured HTTP listener instead of enabling an unavailable module.
+        let address = SocketAddr::from(([127, 0, 0, 1], server_port));
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            assert!(
+                child.try_wait().unwrap().is_none(),
+                "server exited before readiness"
+            );
+            if let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(1)))
+                    .unwrap();
+                stream
+                    .write_all(
+                        b"GET /unknown HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                    )
+                    .unwrap();
+                let mut response = String::new();
+                stream.read_to_string(&mut response).unwrap();
+                assert!(response.starts_with("HTTP/1.1 401"), "{response}");
+                assert!(response.contains("application/json"), "{response}");
+                assert!(response.contains("www-authenticate: Bearer"), "{response}");
+                assert!(!response.contains("config-resolution-secret"));
+                break;
+            }
+            assert!(Instant::now() < deadline, "server did not start in time");
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
 
     terminate_child(&mut child);
 }

@@ -6,6 +6,7 @@
 
 mod authorization;
 mod backtrace;
+pub mod http_error;
 mod logging;
 
 pub mod phase;
