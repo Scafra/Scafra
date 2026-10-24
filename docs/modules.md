@@ -5,6 +5,10 @@ facade features. Default features are empty. These APIs are implemented at the
 current workspace version `0.1.0`; the architecture targets 1.0 without claiming
 that 1.0 has been published.
 
+See the [API compatibility policy](api-stability.md) for the proposed 1.0
+stability classification and [upgrade procedure](upgrading.md) for coordinated
+source, feature and runtime migration.
+
 ## Cargo feature reference
 
 | Facade feature | Enables | Excludes unless selected elsewhere |

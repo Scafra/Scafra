@@ -95,7 +95,7 @@ out-of-order dependency. Development-only dependencies do not constrain
 publication. The workflow runs this check before package enumeration.
 
 CI retains workspace all-feature checks and separately runs isolated external
-consumers for minimal/default facade, direct config/core, web, secure-web, JWT,
+consumers for minimal/default facade, direct config/core, foundation, web, secure-web, JWT,
 JWKS, actuator, scheduler, standard, and all features. The consumer matrix uses the declared MSRV (1.88.0), plus a
 stable minimal build. Each invocation uses one consumer selection to avoid
 workspace feature unification masking missing APIs or unwanted dependencies.
@@ -157,3 +157,46 @@ both registry-source macro consumers during implementation. The direct crates.io
 resolution limitation above still applies until stable dependencies are
 published. Local staged success must not be reported as a crates.io upload or
 crates.io index-resolution test.
+
+## Compatibility release gate
+
+The [API stability policy](api-stability.md) is the canonical versioning,
+feature, MSRV, target and prerelease contract. It remains proposed until
+maintainer approval; 1.0 has not shipped. All twelve packages use one coordinated
+version and release commit, including unchanged packages. Update the root
+workspace version **and every first-party dependency requirement** together;
+check `python3 scripts/check-api-policy.py` after version selection. Keep
+compatible ranges unless resolution evidence justifies a different contract.
+The root version strings are coordinated lower bounds, not exact Cargo pins.
+The snapshot selector rewrites matching root package and dependency versions
+together; regression tests execute that exact shell without any publication.
+The CLI, macros and build generator must be reviewed with their target runtime.
+
+Before authorizing a stable tag or prerelease publication:
+
+1. Apply the [maintainer checklist](contributing.md#compatibility-review-checklist),
+   select the version from the compatibility matrix, and prepare release notes
+   with API/config/feature/dependency/MSRV changes, known limitations and linked
+   migration examples. A breaking release requires a written maintainer decision.
+2. Attach all workspace default/all-feature, policy, Rust 1.88, external consumer,
+   negative/security/lifecycle, generated-project and staged-package results
+   required by the policy for the exact release commit. The publish job now
+   checks policy consistency too; its stable workspace checks do not replace
+   the separate MSRV/isolated-consumer CI jobs.
+3. Resolve/re-scope #12 HTTP errors and #19 resource protection explicitly;
+   approve their final API/config/default/response contracts before 1.0 freezes
+   the candidate inventory. Keep security invariants throughout. Review any
+   minor-release MSRV increase under the policy; the current floor remains 1.88.
+   Freeze the intended stable contract in an RC; rerun on each RC correction.
+   #15/#42 own real published-package, all-template and previous-version upgrade
+   verification. Directory registry-source staging does not prove crates.io
+   acceptance; smoke-test final published artifacts as part of release completion.
+4. Require #33 compiler/target evidence, #43 advisory/redaction triage and named
+   security ownership, #9 benchmark evidence and #39 explicit go/no-go review.
+   No unresolved material security issue may be waived by a green compile check.
+
+Alpha/beta/RC/snapshot versions are coordinated prereleases with the support
+limits in the policy. They do not establish a stable maintenance line. No
+publication is authorized by writing this policy. The existing order checker
+continues to enforce foundation → core → dependent packages, including build
+before macros; use the actual workflow arrays as the full ordered list.

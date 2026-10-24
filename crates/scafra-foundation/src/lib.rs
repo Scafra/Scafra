@@ -27,7 +27,7 @@ pub use tracing::{debug, error, info, trace, warn};
 #[macro_export]
 macro_rules! startup {
     ($($arg:tt)*) => {
-        ::tracing::info!(target: "scafra::startup", $($arg)*)
+        $crate::info!(target: "scafra::startup", $($arg)*)
     };
 }
 
