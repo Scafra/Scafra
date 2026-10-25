@@ -268,6 +268,10 @@ joined dashboard shutdown, and a genuinely HTTP-free scheduler consumer.
 
 Final frozen source verification: all seven workspace commands and the Rust1.88
 locked all-feature check pass; suites report343default/471all-feature tests.
-The full external/MSRV consumer catalogue, negative fixtures and staged package
-checks remain BLOCKED pending the repository-required scoped scratch-write
-authorization. These are not inferred from workspace success. See final review.
+The separately executed external/MSRV catalogue now passes16/16consumers on
+Rust1.88; the negative suite passes9/9 after migrating two outdated RouterOptions
+fixtures; staged verification passes all12packages and2registry-source consumers.
+The task owner authorized the exact output subtree on2026-10-25. These outcomes
+are independently recorded and are not inferred from workspace success. See the
+[final review](cfg-01-final-review.md) for commands, logs, preserved failed attempt,
+unchanged production-source fingerprint and final independent review.

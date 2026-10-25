@@ -52,7 +52,7 @@ def project(out, name, features, protected=False, unified=False, entrypoint=True
         manifest += dependency('scafra-security', ['jwks'])
         # Require the unified subcrate fields at compile time. The facade's own
         # feature mask must still refuse to configure these capabilities.
-        body = 'let _ = scafra_web::RouterOptions { security: Default::default(), actuator: Default::default(), request_timeout: None };'
+        body = 'let _ = scafra_web::RouterOptions { security: Default::default(), actuator: Default::default(), request_timeout: None, ..Default::default() };'
     (path / 'Cargo.toml').write_text(manifest)
     (path / 'Cargo.lock').write_bytes((ROOT / 'Cargo.lock').read_bytes())
     (path / 'src/main.rs').write_text('#[scafra::main]\nasync fn main() { ' + body + ' }\n')

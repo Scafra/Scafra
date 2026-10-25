@@ -1,27 +1,33 @@
 # CFG-01 final implementation and independent review
 
-Decision: **BLOCKED — required outside-checkout verification needs scoped output authorization.**
+Decision: **READY FOR PR REVIEW.**
 
 The implementation, twelve-crate inventory, configuration reference, regression
-coverage and independent source reviews are present. This document does not
-claim issue #111 complete or authorize a PR, commit, publication or issue edit.
-The remaining release gate is the existing full external consumer/negative/
-package verification described below. Checkout-local generated consumers are
-separate evidence and are not represented as those unexecuted scripts.
+coverage, independent source reviews and required local verification are complete.
+The task owner authorized the external output subtree on 2026-10-25; the full
+consumer, negative and staged package checks now pass. Hosted CI and maintainer
+approval remain separate. This status does not authorize creating a PR, committing,
+pushing, publishing packages or editing issues.
 
 ## A. Repository state
 
 - Branch: `111-cfg-01-audit-all-scafra-defaults-and-make-operational-settings-overridable-before-100`.
   The task owner corrected the original `11-` spelling explicitly.
 - Base: `d2bb06be59e98db22e6c7d1b96181395786e3376` (merge of HTTP error work #12).
-- Initial working tree: clean. Current changes are uncommitted task work.
-- No branch creation/switch, commit, push, PR, merge, package publication,
+- Original implementation began with a clean tree. This continuation resumed
+  with a clean tree at `60f2dec477d02889426115b33ed2822cad2ebb57`, which already
+  contains exactly the previously verified 70 implementation paths. The Rust,
+  manifest and lockfile fingerprint is unchanged.
+- Continuation edits are uncommitted: the negative verification fixture and this
+  report/inventory. The existing commit and all other work were preserved.
+- No agent branch creation/switch, commit, push, PR, merge, package publication,
   release-version change, remote issue edit or unrelated repository edit.
 - Repository skills referenced by AGENTS.md were absent; the task owner explicitly
   authorized proceeding without them. No missing skill is claimed as loaded.
-- Changed paths: **70**. Rust/manifests/lockfile source fingerprint: `553fe89f2e342cd84d5afc6e8113addcbe21724ec706d1684b6de68f0696879f`.
+- Combined implementation/verification paths relative to the original base: **71**. Rust/manifests/lockfile source fingerprint: `553fe89f2e342cd84d5afc6e8113addcbe21724ec706d1684b6de68f0696879f`.
 
-Changed files (logs/build products remain in ignored `target/`):
+Implementation/verification files (70 already in the resumed commit, plus the
+negative-script migration; logs/build products remain in ignored `target/`):
 
 - [Cargo.lock](../../Cargo.lock)
 - [Cargo.toml](../../Cargo.toml)
@@ -92,6 +98,7 @@ Changed files (logs/build products remain in ignored `target/`):
 - [docs/modules.md](../../docs/modules.md)
 - [docs/security.md](../../docs/security.md)
 - [docs/upgrading.md](../../docs/upgrading.md)
+- [scripts/arch103-negative.py](../../scripts/arch103-negative.py)
 - [scripts/issue111-runtime.py](../../scripts/issue111-runtime.py)
 
 ## B. Audit results
@@ -253,7 +260,7 @@ follow-up diffs. Confirmed findings were evaluated and corrected:
 | Scheduler special paths changed generic domain loading | Gate framework-specific splitting/environment registration handling; nested-domain regressions |
 | Selected base file rejected on profile reapplication | Preserve selected file identity/role and extension ordering, including path aliases |
 
-Final targeted review found no remaining confirmed source blocker. Reviewer
+Final targeted source and external-evidence review found no remaining confirmed blocker. Reviewer
 execution was source review plus `git diff --check`, not an independent Cargo
 run; Cargo evidence below was executed by the primary/verification agents.
 
@@ -349,31 +356,55 @@ verification was enabled; the framework correctly denied it. The fixture was
 corrected to use its explicitly configured Basic scheme. The passing40case
 matrix checks authentication rather than weakening the JWT fallback invariant.
 
-### Required checks awaiting output authorization
+### External verification completed — 2026-10-25
 
-AGENTS.md and `docs/development/codex.md` require explicit authorization for
-outside-checkout writes. These existing scripts reject in-checkout output paths.
-The scoped question requests only `/var/tmp/scafra-111-verification-20261024`
-and descendants. No such task output has been created by this work.
+The task owner explicitly authorized `/var/tmp/scafra-111-verification-20261024`
+and descendants. Tests used that exact subtree, with a shared temporary directory
+inside it and `CARGO_BUILD_JOBS=4`. Framework configuration environment controls
+were removed from the test process environment so unrelated deployment settings
+could not alter fixtures. No publication, remote resource mutation or Git change
+was performed. The resumed checkout was clean at `60f2dec` and its production
+source matches the fingerprint used for the seven workspace checks above.
 
-Planned commands after that authorization:
+| Exact external command | Outcome | Evidence |
+| --- | --- | --- |
+| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-consumers.py /var/tmp/scafra-111-verification-20261024/consumers-msrv --proposed --runtime --target-dir /var/tmp/scafra-111-verification-20261024/consumer-target-msrv --timeout 600` | **PASSED**16isolated consumers, all lock/tree/build/runtime checks; no forbidden dependencies;168.592s | [results](../../target/cfg-111/external-results/consumers.json), [execution](../../target/cfg-111/external-results/consumers-execution.json) |
+| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-negative.py --output /var/tmp/scafra-111-verification-20261024/negative-retry --target-dir /var/tmp/scafra-111-verification-20261024/negative-target --timeout 600` | **PASSED**9negative cases;13.638s | [results](../../target/cfg-111/external-results/negative.json), [execution](../../target/cfg-111/external-results/negative-retry-execution.json) |
+| `python3 scripts/arch103-package-check.py /var/tmp/scafra-111-verification-20261024/packages --offline` | **PASSED**12packaged/extracted crates and2registry-source macro consumers;146.840s | [results](../../target/cfg-111/external-results/packages.json), [execution](../../target/cfg-111/external-results/packages-execution.json) |
 
-```sh
-RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-consumers.py /var/tmp/scafra-111-verification-20261024/consumers-msrv --proposed --runtime --target-dir /var/tmp/scafra-111-verification-20261024/consumer-target-msrv
-RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-negative.py --output /var/tmp/scafra-111-verification-20261024/negative --target-dir /var/tmp/scafra-111-verification-20261024/negative-target
-python3 scripts/arch103-package-check.py /var/tmp/scafra-111-verification-20261024/packages --offline
-```
+The consumer cases are minimal, config, core, foundation, web, secure-web,
+inventory, jwt, nested, jwks, actuator, scheduler, default, standard, bootui and
+all. Consumer and negative checks ran on Rust1.88.0 (`6b00bc388`, LLVM20.1.5),
+`x86_64-unknown-linux-gnu`; package verification ran on Rust1.99.1/LLVM23.1.1.
+The catalogue checks feature closure independently and exercises fail-closed
+credentials/roles/scopes, nested composition, resource cleanup, readiness,
+scheduler-only execution and safe BootUI snapshots where applicable.
 
-All three: **BLOCKED / NOT RUN**, not passed. The complete16case isolated MSRV
-consumer catalogue, independent negative fixtures and staged registry/package
-verification remain release-critical missing evidence. Local generated consumers
-and workspace all-features do not substitute for them. No hosted CI, published
-package or remote Git consumer result is claimed.
+The initial negative run had seven passing and two failing cases because two
+capability-unification fixtures still used the old exhaustive RouterOptions literal (E0063). The shared
+fixture now adds `..Default::default()`, preserving its explicit security and
+actuator compile-time probes and explicit `request_timeout: None`. No capability
+assertion was removed or weakened. The complete suite then passed all nine cases. The failed
+[initial results](../../target/cfg-111/external-results/negative-initial.json) and
+[execution](../../target/cfg-111/external-results/negative-execution.json) remain
+preserved, alongside the successful retry. These expected negative cases include
+compiler101/startup1 outcomes; the verification scripts themselves exit0 on success.
+
+Full sources, locks, trees, archives and logs remain under the approved subtree.
+Small machine-readable results are also copied into ignored
+`target/cfg-111/external-results/`; [summary](../../target/cfg-111/external-results/summary.json).
+Independent review inspected the fixture migration, unchanged production hash,
+all16consumer rows, all9negative results and package/consumer results and found no
+remaining confirmed blocker. It did not independently execute Cargo.
+
+There are no outstanding local verification or permission blockers. Hosted CI,
+published crates.io smoke tests and remote Git consumers are not claimed by this
+local package/registry-source verification. No package was published.
 
 ## J. Issue #111 acceptance criteria
 
-PASS below is scoped to the stated executable/source evidence. PARTIAL/BLOCKED
-rows prevent completion even where source review found no confirmed defect.
+All criteria below pass within the implemented and documented contract. Scope
+limitations are explicit; no unsupported protocol or termination guarantee is inferred.
 
 | Criterion | Status | Evidence / limit |
 | --- | --- | --- |
@@ -404,8 +435,8 @@ rows prevent completion even where source review found no confirmed defect.
 | Authentication/authorization fail closed | PASS | Security/JWT/JWKS/nested/raw/BootUI regression suites |
 | Secrets remain redacted | PASS | Diagnostics, error bodies, logs and exact BootUI snapshot tests |
 | Router composition does not bypass limits/security | PASS | Managed/raw/nested/global ceiling regressions |
-| Optional Cargo feature isolation | PARTIAL | Positive independent minimal/web/security/JWT/actuator/standard/all/scheduler evidence; full catalogue pending |
-| Rust1.88workspace compatibility | PASS | Locked all-feature MSRV command; independent MSRV catalogue separate |
+| Optional Cargo feature isolation | PASS | All16independent consumers checked on Rust1.88 with no forbidden normal dependencies |
+| Rust1.88workspace compatibility | PASS | Locked all-feature workspace check plus16independent MSRV consumers and9negative cases |
 | Public API migration documented | PASS | Reference/API inventory/upgrading/generated examples |
 | Generated apps compile/run | PASS | CLI matrix, six generated-main feature variants, worker, explicitignoredHTTPtest |
 | Existing HTTP status/header/error contract preserved | PASS | #12generated matrix +framework regressions |
@@ -413,21 +444,24 @@ rows prevent completion even where source review found no confirmed defect.
 | Relevant focused crate tests | PASS | Commands/logs above, supplemented by workspace suites |
 | Default and overridden runtime behavior | PASS |40case generated matrix +host/claim/cache/health/scheduler/lifecycle tests |
 | Negative HTTP/resource tests | PASS |18resource tests incl32H2concurrency iterations |
-| Full feature-isolated consumer catalogue | BLOCKED | Existing outside-checkout script not authorized/run |
+| Full feature-isolated consumer catalogue | PASS | Existing script:16/16lock/tree/build/runtime cases on Rust1.88 |
 | Security regression suites | PASS | Minimal/JWT/allfeature and workspace/runtime tests |
 | Real generated application tests | PASS | Source variants and explicitCLI loopback/graceful test |
 | Documentation examples match implementation | PASS | Literal compile/run and fixture equivalence |
 | Independent source review without unresolved confirmed blocker | PASS | Final targeted reviewer reports; no independent Cargo claim |
-| Independent negative consumer fixtures | BLOCKED | Existing outside-checkout script not authorized/run |
-| Staged package/registry consumer checks | BLOCKED | Existing outside-checkout script not authorized/run |
-| Complete issue/release readiness | BLOCKED | Missing mandatory external/package evidence |
+| Independent negative consumer fixtures | PASS | Existing script:9/9; original fixture failures retained and corrected |
+| Staged package/registry consumer checks | PASS |12extracted packages and2version-only registry-source consumers |
+| Complete issue/local PR readiness | PASS | All required local evidence present; hosted CI and maintainer approval separate |
 
 ## K. Final decision
 
-**BLOCKED.** The code and local evidence are concrete and reviewable, with no
-remaining confirmed source blocker from independent review. Issue #111 is not
-complete because the required full external consumer, independent negative and
-staged package checks have not run. Scoped output authorization is still needed
-under the repository's explicit operational boundary. After authorization, run
-those checks, correct any confirmed findings, update this ledger and reassess
-readiness. No PR/commit/push/publication/remote edit is authorized or performed.
+**READY FOR PR REVIEW.** The full implementation and required local verification
+are complete, with no unresolved material issue #111 criterion or confirmed
+release-blocking finding from independent review. All seven workspace commands,
+locked Rust1.88workspace check, complete isolated MSRV consumer catalogue,
+negative suite, generated-app/runtime matrices and staged package checks pass.
+The source fingerprint is unchanged from the reviewed and workspace-tested Rust
+implementation. The only continuation code change migrates an outdated negative
+fixture to the documented public-struct construction pattern; its full suite was
+rerun successfully. Hosted CI and maintainer approval are separate. No agent
+commit, PR, push, merge, publication or issue edit was performed.
