@@ -93,7 +93,9 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
             runtime.block_on(async {
                     #body
                     if let Err(error) = ::scafra::run_with_finalized_resources(|config| async move {
-                        let graph = __scafra_graph::compose_async().await?;
+                        let graph = __scafra_graph::compose_async_with_policy(
+                            __scafra_graph::Overrides::default(), config.shutdown.policy(),
+                        ).await?;
                         let (router, resources) = graph.build_finalized_router_with_options_and_resources(
                             &::scafra::router_options(&config),
                         );
@@ -103,7 +105,7 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
                                 if let Err(cleanup) = ::scafra::core::AsyncResourceSet::shutdown(
                                     &resources,
                                     ::scafra::ShutdownReason::StartupFailure,
-                                    ::scafra::ShutdownPolicy::default(),
+                                    config.shutdown.policy(),
                                 ).await {
                                     ::scafra::__private::log_cleanup_failure(
                                         &::scafra::StartupError::from(cleanup),

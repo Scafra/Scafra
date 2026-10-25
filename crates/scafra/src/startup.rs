@@ -131,9 +131,12 @@ where
     if config.startup.banner {
         print_startup_banner(&config, &loader, &profile);
     }
-    let address = format!("{}:{}", config.server.host, config.server.port)
-        .parse()
-        .map_err(|error: std::net::AddrParseError| StartupError::Address(error.to_string()))?;
+    let ip = config
+        .server
+        .host
+        .parse::<std::net::IpAddr>()
+        .map_err(|error| StartupError::Address(error.to_string()))?;
+    let address = std::net::SocketAddr::new(ip, config.server.port);
     let (router, resources) = build_runtime(config.clone()).await?;
     let context = ApplicationContext::discover();
     startup!(
@@ -144,7 +147,7 @@ where
     if let Err(error) = application.start() {
         resources.request_shutdown(ShutdownReason::StartupFailure);
         if let Err(cleanup) = resources
-            .shutdown(ShutdownReason::StartupFailure, ShutdownPolicy::default())
+            .shutdown(ShutdownReason::StartupFailure, config.shutdown.policy())
             .await
         {
             __private::log_cleanup_failure(&StartupError::from(cleanup));
@@ -152,7 +155,7 @@ where
         return Err(StartupError::from(error));
     }
     startup!("application lifecycle started");
-    let policy = ShutdownPolicy::default();
+    let policy = config.shutdown.policy();
     #[cfg(feature = "scheduler")]
     let scheduler = match Scheduler::try_start(&config.scheduler) {
         Ok(scheduler) => scheduler,
@@ -178,18 +181,48 @@ where
     #[cfg(feature = "scheduler")]
     let scheduler_shutdown = scheduler.shutdown_handle();
     let resources_shutdown = Arc::clone(&resources);
+    #[cfg(feature = "bootui")]
+    let bootui_server = Arc::new(std::sync::Mutex::new(None::<scafra_bootui::BootUiServer>));
+    #[cfg(feature = "bootui")]
+    let bootui_shutdown = Arc::clone(&bootui_server);
+    #[cfg(feature = "bootui")]
+    let bootui_startup = Arc::clone(&bootui_server);
     let on_shutdown_requested = move |reason| {
         #[cfg(feature = "scheduler")]
         scheduler_shutdown.request_shutdown();
+        #[cfg(feature = "bootui")]
+        if let Some(server) = bootui_shutdown
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_mut()
+        {
+            server.request_shutdown();
+        }
         resources_shutdown.request_shutdown(reason);
     };
     let extension_config = config.clone();
     let extension_profile = profile.clone();
     let on_server_started = move || {
+        #[cfg(feature = "bootui")]
+        match scafra_bootui::start_managed_with_config(&extension_config, &extension_profile) {
+            Ok(server) => {
+                *bootui_startup
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = server;
+            }
+            Err(_) => scafra_foundation::error!(
+                error_kind = "bootui_configuration",
+                "BootUI could not start with the configured policy"
+            ),
+        }
         let mut extensions =
             inventory::iter::<scafra_config::ConfiguredExtensionRegistration>().collect::<Vec<_>>();
         extensions.sort_by_key(|extension| extension.name);
         for extension in extensions {
+            #[cfg(feature = "bootui")]
+            if extension.name == "scafra-bootui" {
+                continue;
+            }
             (extension.start)(&extension_config, &extension_profile);
         }
     };
@@ -207,6 +240,27 @@ where
         Err(error) => {
             let reason = server_shutdown_reason(&error);
             (Err(StartupError::from(error.into_web_error())), reason)
+        }
+    };
+    #[cfg(feature = "bootui")]
+    let result = {
+        // Release the startup-only lock before awaiting the owned listener.
+        let server = bootui_server
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let cleanup = match server {
+            Some(server) => server.shutdown().await.map_err(StartupError::from),
+            None => Ok(()),
+        };
+        match (result, cleanup) {
+            (Ok(()), cleanup) => cleanup,
+            (Err(error), cleanup) => {
+                if let Err(cleanup) = cleanup {
+                    __private::log_cleanup_failure(&cleanup);
+                }
+                Err(error)
+            }
         }
     };
     #[cfg(feature = "scheduler")]
@@ -269,9 +323,7 @@ fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader, profile: &
     ];
     let logo = logo
         .iter()
-        .map(|line| {
-            paint(line, "38;2;255;107;53;1", color)
-        })
+        .map(|line| paint(line, "38;2;255;107;53;1", color))
         .collect::<Vec<_>>()
         .join("\n");
     let label = |value: &str| paint(value, "38;5;208;1", color);
@@ -282,7 +334,11 @@ fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader, profile: &
         paint(env!("CARGO_PKG_VERSION"), "37", color),
         label("server"),
         paint(
-            &format!("http://{}:{}", config.server.host, config.server.port),
+            &if config.server.host.contains(':') {
+                format!("http://[{}]:{}", config.server.host, config.server.port)
+            } else {
+                format!("http://{}:{}", config.server.host, config.server.port)
+            },
             "37",
             color
         ),
@@ -318,6 +374,18 @@ pub fn router_options(config: &ScafraConfig) -> web::RouterOptions {
         actuator: config.actuator.clone(),
         #[cfg(feature = "security")]
         security: config.security.clone(),
+        max_request_body_bytes: config.server.max_request_body_bytes,
+        connection: web::ConnectionOptions {
+            header_read_timeout: std::time::Duration::from_secs(
+                config.server.header_read_timeout_seconds,
+            ),
+            idle_timeout: std::time::Duration::from_secs(config.server.idle_timeout_seconds),
+            max_connections: config.server.max_connections,
+            max_header_bytes: config.server.max_header_bytes,
+            http1_keep_alive: config.server.http1_keep_alive,
+            http1_max_headers: config.server.http1_max_headers,
+            http2_max_concurrent_streams: config.server.http2_max_concurrent_streams,
+        },
         request_timeout: config
             .server
             .request_timeout_seconds

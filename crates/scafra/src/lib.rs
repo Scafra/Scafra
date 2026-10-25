@@ -3,7 +3,8 @@
 pub use scafra_config as config;
 pub use scafra_config::{
     BootUiConfig, Config, ConfigCapabilities, ConfigError, ConfigLoader, ConfigProperties,
-    LoggingConfig, Properties, ScafraConfig, ServerConfig, StartupConfig, ValidationError,
+    LoggingConfig, Properties, ScafraConfig, ServerConfig, ShutdownConfig, StartupConfig,
+    ValidationError,
 };
 pub use scafra_core as core;
 pub use scafra_core::{

@@ -42,6 +42,10 @@ scafra-scheduler = { path = "crates/scafra-scheduler", version = "0.1.0" }
 scafra-security = { default-features = false, path = "crates/scafra-security", version = "0.1.0" }
 scafra-web = { default-features = false, path = "crates/scafra-web", version = "0.1.0" }
 http = "1"
+http-body = "1"
+http-body-util = "0.1"
+hyper-util = { version = "0.1.21", features = ["server-auto", "service", "tokio"] }
+pin-project-lite = "0.2"
 inventory = "0.3"
 proc-macro2 = "1"
 quote = "1"

@@ -11,7 +11,7 @@ use crate::{
     cli::{ApplicationKind, Capability, Cli, CommandKind},
     filesystem::{
         escape_toml_basic_string, local_dependency, manifest_path, normalize_package_name,
-        package_name,
+        package_name, resolve_poll_interval,
     },
     generator::{create_project, publish_staging_directory},
     templates::STANDARD_DIRECTORIES,
@@ -55,7 +55,8 @@ fn dev_accepts_one_explicit_configuration_selector() {
         cli.command,
         CommandKind::Dev {
             config_dir: Some(path),
-            config_file: None
+            config_file: None,
+            poll_interval_ms: None,
         } if path == config_dir
     ));
 
@@ -68,6 +69,70 @@ fn dev_accepts_one_explicit_configuration_selector() {
         "/etc/scafra/application.yaml",
     ])
     .is_err());
+}
+
+#[test]
+fn development_poll_interval_has_validated_precedence_and_redacted_errors() {
+    use std::{ffi::OsStr, time::Duration};
+    assert_eq!(
+        resolve_poll_interval(None, None).unwrap(),
+        Duration::from_millis(500)
+    );
+    assert_eq!(
+        resolve_poll_interval(None, Some(OsStr::new("750"))).unwrap(),
+        Duration::from_millis(750)
+    );
+    assert_eq!(
+        resolve_poll_interval(Some("100"), Some(OsStr::new("secret-value"))).unwrap(),
+        Duration::from_millis(100)
+    );
+    assert_eq!(
+        resolve_poll_interval(Some("60000"), None).unwrap(),
+        Duration::from_secs(60)
+    );
+    for invalid in [
+        "0",
+        "99",
+        "60001",
+        "-1",
+        "18446744073709551616",
+        "secret-value",
+    ] {
+        for error in [
+            resolve_poll_interval(Some(invalid), None).unwrap_err(),
+            resolve_poll_interval(None, Some(OsStr::new(invalid))).unwrap_err(),
+        ] {
+            assert_eq!(
+                error.to_string(),
+                "dev poll interval must be an integer between 100 and 60000 milliseconds"
+            );
+        }
+    }
+    let cli = Cli::try_parse_from(["scafra", "dev", "--poll-interval-ms", "750"]).unwrap();
+    assert!(
+        matches!(cli.command, CommandKind::Dev { poll_interval_ms: Some(value), .. } if value == "750")
+    );
+}
+
+#[test]
+fn generated_configuration_exposes_runtime_resource_defaults() {
+    let root = test_directory("runtime-defaults");
+    create_project(&root, ApplicationKind::Web, &[]).unwrap();
+    let config = fs::read_to_string(root.join("src/resources/application.yaml")).unwrap();
+    for setting in [
+        "timeout: 30",
+        "max_request_body_bytes: 1048576",
+        "header_read_timeout_seconds: 10",
+        "idle_timeout_seconds: 60",
+        "max_connections: 1024",
+        "max_header_bytes: 32768",
+        "http1_keep_alive: true",
+        "grace_period_seconds: 30",
+        "force_after_grace: true",
+    ] {
+        assert!(config.contains(setting), "missing {setting}");
+    }
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

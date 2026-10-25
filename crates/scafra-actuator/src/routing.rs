@@ -21,9 +21,9 @@ pub(crate) struct ActuatorState {
 /// [`HealthRegistry`] per graph and [`router_with_health_registry`].
 pub fn router(config: &ActuatorConfig) -> Router {
     let registry = HealthRegistry::from_legacy_registrations();
-    let valid = registry.validate(&config.health).is_ok();
+    let valid = config.validate().is_ok() && registry.validate(&config.health).is_ok();
     if !valid {
-        tracing::error!("actuator health configuration references unknown checks");
+        tracing::error!("invalid actuator health configuration");
     }
     build_router(config, registry, valid)
 }
@@ -36,6 +36,7 @@ pub fn router(config: &ActuatorConfig) -> Router {
 /// generated application graph use this fallible path. [`router`] remains
 /// available for source compatibility and fails closed at request time.
 pub fn try_router(config: &ActuatorConfig) -> Result<Router, HealthRegistryError> {
+    config.validate()?;
     let registry = HealthRegistry::from_legacy_registrations();
     registry.validate(&config.health)?;
     Ok(build_router(config, registry, true))
@@ -50,6 +51,7 @@ pub fn router_with_health_registry(
     config: &ActuatorConfig,
     registry: HealthRegistry,
 ) -> Result<Router, HealthRegistryError> {
+    config.validate()?;
     registry.validate(&config.health)?;
     Ok(build_router(config, registry, true))
 }

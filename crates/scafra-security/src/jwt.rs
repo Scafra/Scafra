@@ -59,6 +59,7 @@ pub(super) async fn validate_jwt(
     };
 
     let mut validation = Validation::new(header.alg);
+    validation.leeway = config.leeway_seconds;
     validation.set_required_spec_claims(&["exp"]);
     validation.validate_nbf = true;
     if let Some(issuer) = config.issuer_uri.as_deref() {

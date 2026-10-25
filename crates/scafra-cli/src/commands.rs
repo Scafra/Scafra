@@ -16,7 +16,8 @@ pub(crate) fn run(command: CommandKind) -> Result<()> {
         CommandKind::Dev {
             config_dir,
             config_file,
-        } => run_dev(config_dir, config_file),
+            poll_interval_ms,
+        } => run_dev(config_dir, config_file, poll_interval_ms),
         CommandKind::Check => run_cargo("check"),
     }
 }

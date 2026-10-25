@@ -101,3 +101,35 @@ fn security_token_is_omitted_from_serde_and_debug_output() {
 fn health_config_default_is_consistent_when_used_directly() {
     assert_eq!(HealthConfig::default().check_timeout_ms, 1000);
 }
+
+#[test]
+fn unknown_endpoint_groups_are_rejected_without_echoing_configured_values() {
+    for endpoints in [
+        EndpointSelection::Names(vec!["private-typo".to_owned()]),
+        EndpointSelection::Pattern("health,private-typo".to_owned()),
+        EndpointSelection::Pattern("health,".to_owned()),
+    ] {
+        let config = ActuatorConfig {
+            endpoints,
+            ..Default::default()
+        };
+        let error = config
+            .validate()
+            .expect_err("unknown endpoint must fail validation");
+        assert_eq!(
+            error,
+            scafra_actuator::HealthRegistryError::InvalidEndpointSelection
+        );
+        assert!(!error.to_string().contains("private-typo"));
+        assert!(matches!(
+            scafra_actuator::try_router(&config),
+            Err(scafra_actuator::HealthRegistryError::InvalidEndpointSelection)
+        ));
+    }
+    assert!(ActuatorConfig {
+        endpoints: EndpointSelection::Pattern(String::new()),
+        ..Default::default()
+    }
+    .validate()
+    .is_ok());
+}

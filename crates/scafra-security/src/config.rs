@@ -41,7 +41,7 @@ impl fmt::Debug for SecurityConfig {
 }
 
 /// JWT resource-server configuration.
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct JwtConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -60,6 +60,84 @@ pub struct JwtConfig {
     /// explicitly public.
     #[serde(default)]
     pub required_scopes: Vec<String>,
+    /// Accepted clock skew for expiry and not-before claims, in seconds (0..=300).
+    #[serde(default = "default_leeway_seconds")]
+    pub leeway_seconds: u64,
+    /// Remote key freshness window, in seconds (1..=86400).
+    #[serde(default = "default_cache_ttl_seconds")]
+    pub cache_ttl_seconds: u64,
+    /// Minimum interval between refresh attempts, in seconds (1..=3600).
+    #[serde(default = "default_refresh_cooldown_seconds")]
+    pub refresh_cooldown_seconds: u64,
+    /// Remote provider connection deadline, in milliseconds (1..=300000).
+    #[serde(default = "default_connect_timeout_ms")]
+    pub connect_timeout_ms: u64,
+    /// Total discovery and key retrieval deadline, in milliseconds (1..=300000).
+    #[serde(default = "default_request_timeout_ms")]
+    pub request_timeout_ms: u64,
+}
+
+fn default_cache_ttl_seconds() -> u64 {
+    300
+}
+fn default_leeway_seconds() -> u64 {
+    60
+}
+fn default_refresh_cooldown_seconds() -> u64 {
+    30
+}
+fn default_connect_timeout_ms() -> u64 {
+    2000
+}
+fn default_request_timeout_ms() -> u64 {
+    5000
+}
+
+impl Default for JwtConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            secret: None,
+            issuer_uri: None,
+            jwk_set_uri: None,
+            audiences: Vec::new(),
+            required_scopes: Vec::new(),
+            leeway_seconds: default_leeway_seconds(),
+            cache_ttl_seconds: default_cache_ttl_seconds(),
+            refresh_cooldown_seconds: default_refresh_cooldown_seconds(),
+            connect_timeout_ms: default_connect_timeout_ms(),
+            request_timeout_ms: default_request_timeout_ms(),
+        }
+    }
+}
+
+impl JwtConfig {
+    pub(super) fn validate_remote_policy(&self) -> Result<(), &'static str> {
+        if !(1..=86400).contains(&self.cache_ttl_seconds) {
+            return Err("JWT cache_ttl_seconds must be between 1 and 86400 seconds");
+        }
+        if !(1..=3600).contains(&self.refresh_cooldown_seconds)
+            || self.refresh_cooldown_seconds > self.cache_ttl_seconds
+        {
+            return Err("JWT refresh_cooldown_seconds must be between 1 and 3600 seconds and not exceed cache_ttl_seconds");
+        }
+        if !(1..=300000).contains(&self.connect_timeout_ms) {
+            return Err("JWT connect_timeout_ms must be between 1 and 300000 milliseconds");
+        }
+        if !(1..=300000).contains(&self.request_timeout_ms)
+            || self.connect_timeout_ms > self.request_timeout_ms
+        {
+            return Err("JWT request_timeout_ms must be between 1 and 300000 milliseconds and not be less than connect_timeout_ms");
+        }
+        Ok(())
+    }
+
+    fn has_remote_policy_override(&self) -> bool {
+        self.cache_ttl_seconds != default_cache_ttl_seconds()
+            || self.refresh_cooldown_seconds != default_refresh_cooldown_seconds()
+            || self.connect_timeout_ms != default_connect_timeout_ms()
+            || self.request_timeout_ms != default_request_timeout_ms()
+    }
 }
 
 impl fmt::Debug for JwtConfig {
@@ -78,6 +156,11 @@ impl fmt::Debug for JwtConfig {
             )
             .field("audiences", &self.audiences)
             .field("required_scopes", &self.required_scopes)
+            .field("leeway_seconds", &self.leeway_seconds)
+            .field("cache_ttl_seconds", &self.cache_ttl_seconds)
+            .field("refresh_cooldown_seconds", &self.refresh_cooldown_seconds)
+            .field("connect_timeout_ms", &self.connect_timeout_ms)
+            .field("request_timeout_ms", &self.request_timeout_ms)
             .finish()
     }
 }
@@ -128,7 +211,14 @@ impl SecurityConfig {
         {
             return Err("basic credentials must not be empty");
         }
+        if self.enabled && (self.basic.username.is_some() != self.basic.password.is_some()) {
+            return Err("basic authentication requires both username and password");
+        }
         validate_capabilities(&self.jwt)?;
+        if self.jwt.leeway_seconds > 300 {
+            return Err("JWT leeway_seconds must be between 0 and 300 seconds");
+        }
+        self.jwt.validate_remote_policy()?;
         #[cfg(feature = "jwt")]
         if self.jwt.enabled {
             validate_jwt_config(&self.jwt)?;
@@ -151,12 +241,15 @@ pub(super) fn validate_capabilities(config: &JwtConfig) -> Result<(), &'static s
             || config.issuer_uri.is_some()
             || config.jwk_set_uri.is_some()
             || !config.audiences.is_empty()
-            || !config.required_scopes.is_empty())
+            || !config.required_scopes.is_empty()
+            || config.leeway_seconds != default_leeway_seconds()
+            || config.has_remote_policy_override())
     {
         return Err("JWT configuration requires the `jwt` feature");
     }
     if !cfg!(feature = "jwks")
-        && (config.jwk_set_uri.is_some()
+        && (config.has_remote_policy_override()
+            || config.jwk_set_uri.is_some()
             || (config.issuer_uri.is_some() && config.secret.is_none()))
     {
         return Err("remote JWT configuration requires the `jwks` feature");
@@ -200,6 +293,13 @@ pub(super) fn validate_jwt_config(config: &JwtConfig) -> Result<(), &'static str
         .any(|audience| audience.trim().is_empty())
     {
         return Err("JWT audiences must not contain empty or whitespace-only values");
+    }
+    if config
+        .required_scopes
+        .iter()
+        .any(|scope| scope.trim().is_empty())
+    {
+        return Err("JWT required_scopes must not contain empty or whitespace-only values");
     }
     Ok(())
 }

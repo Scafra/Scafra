@@ -215,7 +215,7 @@ scope claims.
 ## JWKS cache and rotation
 
 Each security middleware instance owns its own JWKS cache; separate routers do
-not share provider state. A successful JWKS document is cached for five minutes
+not share provider state. A successful JWKS document is cached for five minutes by default
 from retrieval. A refresh replaces the complete cached set atomically, so keys
 removed by the provider disappear from the next cache generation.
 
@@ -228,12 +228,12 @@ generic `401` response.
 When a JWT has an unknown `kid` and the cache is still fresh, Scafra performs
 one refresh attempt. The new full key set is then used to resolve the key; if
 the `kid` is still absent, authentication is denied. Repeated misses have a
-30-second refresh cooldown, including failed provider attempts, to bound
+30-second default refresh cooldown, including failed provider attempts, to bound
 requests for attacker-chosen `kid` values. Unknown `kid` requests during the
 cooldown are denied without another provider call. Initial-load and expired
-cache refreshes also have a 30-second retry cooldown after a failure.
+cache refreshes also have a 30-second default retry cooldown after a failure.
 
-A key already in a fresh cache can validate tokens until the five-minute cache
+A key already in a fresh cache can validate tokens until the configured cache
 lifetime expires, even if the provider has become unavailable, has removed that
 key, or starts returning malformed documents. This is the rotation overlap
 policy. After expiration, Scafra must
@@ -242,7 +242,7 @@ remote-key JWT. If a key disappears or is replaced under the same `kid`, the
 change takes effect at the next successful refresh; a removed or replaced key
 is never accepted from an expired generation.
 
-Discovery and JWKS requests use a two-second connection timeout and a
+Discovery and JWKS requests default to a two-second connection timeout and a
 five-second total timeout for the discovery-plus-JWKS operation. Each response
 is limited to one mebibyte, redirects are rejected, and no provider retry loop
 is used. Timeouts, non-success responses, malformed metadata, and malformed
@@ -253,12 +253,17 @@ the router and does not block Tokio worker threads. A waiting request rechecks
 the cache after the refresh completes.
 
 For a planned key rotation, publish the new public key before signing tokens
-with its `kid`, keep the old key available through the maximum five-minute
+with its `kid`, keep the old key available through the configured
 cache lifetime and the application's clock-skew window, then remove the old
 key. Scafra does not use provider `Cache-Control` headers, implement periodic
 background refresh, or enforce an IP-range policy for operator-configured
-provider URLs. Only HTTP(S) URLs are accepted. Request timeout and cache policy
-are fixed rather than configurable in this API.
+provider URLs. Only HTTP(S) URLs are accepted. Configure `security.jwt.cache_ttl_seconds`, `refresh_cooldown_seconds`,
+`connect_timeout_ms` and `request_timeout_ms` for remote providers. The default
+clock-skew allowance is 60 seconds; `security.jwt.leeway_seconds` accepts 0–300.
+Cryptographic checks, bounded remote responses and no redirects remain fixed.
+The [configuration reference](configuration-reference.md) defines bounds and
+all override sources. Invalid enabled actuator credentials now fail checked
+router construction; the legacy infallible router remains fail-closed.
 
 ## Migration impact and limits
 

@@ -186,3 +186,15 @@ The SQLite example demonstrates async setup and teardown. PostgreSQL-specific
 configuration, pool policy, and real-server tests remain in
 [issue #46](https://github.com/Scafra/Scafra/issues/46); that integration can
 use the same local-wrapper provider contract.
+
+## Resolved shutdown policy
+
+The standard runner and generated partial-startup cleanup use
+`config.shutdown.policy()`: grace30 seconds and force-after-grace true by
+default. Configure `shutdown.grace_period_seconds` and `shutdown.force_after_grace`
+through the usual loader sources. HTTP and the owned BootUI listener drain
+cooperatively; resource implementations receive the same policy. This is not
+a single whole-process deadline. Synchronous lifecycle hooks and scheduled
+callbacks cannot be safely preempted; scheduler shutdown preserves ownership
+and joins them. Custom graph composition can pass a policy to
+`compose_async_with_policy`. See the [reference](../configuration-reference.md).

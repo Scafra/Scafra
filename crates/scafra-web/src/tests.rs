@@ -216,7 +216,8 @@ async fn request_processing_timeout_allows_a_completed_request() {
     let router = crate::routing::with_request_timeout(
         Router::new().route("/probe", get(|| async { "ok" })),
         Some(Duration::from_secs(30)),
-    );
+    )
+    .unwrap();
     let response = router
         .oneshot(
             Request::builder()
@@ -240,10 +241,10 @@ async fn request_processing_timeout_returns_gateway_timeout_without_details() {
             "/probe",
             get(|| async { std::future::pending::<&'static str>().await }),
         ),
-        // A zero deadline is deterministic: the timeout wins before the
-        // handler can produce a response, without relying on wall-clock time.
-        Some(Duration::ZERO),
-    );
+        // A finite validated deadline cancels this pending handler.
+        Some(Duration::from_millis(1)),
+    )
+    .unwrap();
     let response = router
         .oneshot(
             Request::builder()
@@ -269,7 +270,8 @@ async fn missing_request_timeout_leaves_the_request_unbounded() {
     let router = crate::routing::with_request_timeout(
         Router::new().route("/probe", get(|| async { "legacy behavior" })),
         None,
-    );
+    )
+    .unwrap();
     let response = router
         .oneshot(
             Request::builder()
@@ -430,7 +432,8 @@ async fn request_deadline_wins_when_handler_and_timeout_become_ready_together() 
             }),
         ),
         Some(duration),
-    );
+    )
+    .unwrap();
     let response = router
         .oneshot(Request::get("/probe").body(Body::empty()).unwrap())
         .await

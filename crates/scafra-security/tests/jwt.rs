@@ -182,3 +182,33 @@ async fn local_secret_mode_rejects_algorithms_other_than_hs256() {
     assert!(!body.contains(&token));
     assert!(!body.contains(JWT_SECRET));
 }
+
+#[tokio::test]
+async fn explicit_clock_skew_changes_expiry_and_not_before_acceptance() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    for claim in [
+        json!({ "exp": now - 20 }),
+        json!({ "exp": now + 3600, "nbf": now + 20 }),
+    ] {
+        let credential = token(claim, JWT_SECRET);
+        for (leeway, expected) in [(0, StatusCode::UNAUTHORIZED), (60, StatusCode::OK)] {
+            let router = layer(
+                Router::new().route("/resource", get(|| async { "authorized" })),
+                SecurityConfig {
+                    enabled: true,
+                    jwt: JwtConfig {
+                        enabled: true,
+                        secret: Some(JWT_SECRET.to_owned()),
+                        leeway_seconds: leeway,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            );
+            assert_eq!(send(&router, Some(&credential)).await.0, expected);
+        }
+    }
+}

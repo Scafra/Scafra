@@ -22,13 +22,45 @@ pub fn join_paths(prefix: &str, path: &str) -> String {
 }
 
 /// Selected integrations and common HTTP middleware settings.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RouterOptions {
     #[cfg(feature = "actuator")]
     pub actuator: ActuatorConfig,
     #[cfg(feature = "security")]
     pub security: scafra_security::SecurityConfig,
     pub request_timeout: Option<Duration>,
+    /// Global hard ceiling, also applied to raw/streamed bodies.
+    pub max_request_body_bytes: usize,
+    /// Settings consumed by Scafra's managed connection server.
+    pub connection: crate::ConnectionOptions,
+}
+impl Default for RouterOptions {
+    fn default() -> Self {
+        Self {
+            #[cfg(feature = "actuator")]
+            actuator: Default::default(),
+            #[cfg(feature = "security")]
+            security: Default::default(),
+            request_timeout: Some(Duration::from_secs(30)),
+            max_request_body_bytes: 1_048_576,
+            connection: Default::default(),
+        }
+    }
+}
+impl RouterOptions {
+    pub fn validate(&self) -> Result<(), WebError> {
+        crate::limits::validate_body_limit(self.max_request_body_bytes)?;
+        if self
+            .request_timeout
+            .is_some_and(|timeout| timeout.is_zero() || timeout > Duration::from_secs(86_400))
+        {
+            return Err(WebError::Server(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "request_timeout must be greater than zero and at most one day",
+            )));
+        }
+        self.connection.validate()
+    }
 }
 
 /// A validated router whose middleware has already been installed.
@@ -38,6 +70,7 @@ pub struct RouterOptions {
 #[derive(Debug)]
 pub struct FinalizedRouter {
     pub(crate) router: Router,
+    pub(crate) connection: crate::ConnectionOptions,
 }
 
 impl FinalizedRouter {
@@ -51,6 +84,7 @@ impl FinalizedRouter {
     pub fn nest(self, prefix: &str) -> Self {
         Self {
             router: Router::new().nest(prefix, self.router),
+            connection: self.connection,
         }
     }
 }
@@ -66,6 +100,7 @@ pub fn finish_managed_router(
     routes: &[crate::registration::RouteMetadata],
     options: &RouterOptions,
 ) -> Result<FinalizedRouter, WebError> {
+    options.validate()?;
     validate_routes_with_options(routes, options)?;
     let policies = authorization_metadata_for(routes);
     validate_authorization_metadata(&policies)?;
@@ -81,6 +116,7 @@ pub fn finish_managed_router(
     let router = scafra_security::context_layer(router, options.security.clone());
     Ok(FinalizedRouter {
         router: http_middleware(router, options),
+        connection: options.connection.clone(),
     })
 }
 
@@ -175,6 +211,7 @@ fn apply_middleware(
     routes: &[crate::registration::RouteMetadata],
     options: &RouterOptions,
 ) -> Result<Router, WebError> {
+    options.validate()?;
     let router = security_middleware(router, routes, options)?;
     Ok(http_middleware(router, options))
 }
@@ -203,8 +240,9 @@ fn security_middleware(
 }
 
 fn http_middleware(router: Router, options: &RouterOptions) -> Router {
-    let router = router.layer(DefaultBodyLimit::max(1024 * 1024));
-    let router = with_request_timeout(router, options.request_timeout);
+    let router = router.layer(DefaultBodyLimit::max(options.max_request_body_bytes));
+    let router = crate::limits::body_limit(router, options.max_request_body_bytes);
+    let router = request_timeout_layer(router, options.request_timeout);
     router.layer(TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
         tracing::debug_span!("request", method = %request.method(), version = ?request.version())
     }))
@@ -288,7 +326,7 @@ pub fn build_router_with_actuator_and_security(
     actuator: &ActuatorConfig,
     security: &scafra_security::SecurityConfig,
 ) -> Result<Router, WebError> {
-    build_router_with_timeout(actuator, security, None)
+    build_router_with_timeout(actuator, security, RouterOptions::default().request_timeout)
 }
 
 /// Builds the default application router with checks owned by one graph.
@@ -316,7 +354,12 @@ pub fn build_router_with_actuator_and_health_registry_and_security(
     security: &scafra_security::SecurityConfig,
 ) -> Result<Router, WebError> {
     let router = scafra_actuator::router_with_health_registry(actuator, registry)?;
-    build_router_with_actuator_router(router, actuator, security, None)
+    build_router_with_actuator_router(
+        router,
+        actuator,
+        security,
+        RouterOptions::default().request_timeout,
+    )
 }
 
 #[cfg(all(feature = "actuator", feature = "security"))]
@@ -358,6 +401,7 @@ pub fn finish_router(
             actuator: actuator.clone(),
             security: security.clone(),
             request_timeout,
+            ..Default::default()
         },
     )
 }
@@ -498,7 +542,24 @@ pub fn default_controller_metadata(
         .collect()
 }
 
-pub(crate) fn with_request_timeout(router: Router, request_timeout: Option<Duration>) -> Router {
+/// Adds a local deadline; an enclosing deadline remains a hard ceiling.
+/// `None` adds no local timer and cannot disable an outer deadline.
+pub fn with_request_timeout(
+    router: Router,
+    request_timeout: Option<Duration>,
+) -> Result<Router, WebError> {
+    if request_timeout
+        .is_some_and(|timeout| timeout.is_zero() || timeout > Duration::from_secs(86_400))
+    {
+        return Err(WebError::Server(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "request_timeout must be greater than zero and at most one day",
+        )));
+    }
+    Ok(request_timeout_layer(router, request_timeout))
+}
+
+fn request_timeout_layer(router: Router, request_timeout: Option<Duration>) -> Router {
     match request_timeout {
         Some(timeout) => router.layer(axum::middleware::from_fn(
             move |request: axum::extract::Request, next: axum::middleware::Next| async move {

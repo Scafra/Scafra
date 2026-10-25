@@ -40,7 +40,8 @@ pub struct ActuatorConfig {
 pub struct HealthConfig {
     #[serde(default)]
     pub checks: Vec<String>,
-    /// Maximum time allowed for each check, in milliseconds. Defaults to 1000.
+    /// Maximum time allowed for each check, in milliseconds. Defaults to 1000;
+    /// supported values are 1 through 300000, inclusive.
     #[serde(default = "default_check_timeout_ms")]
     pub check_timeout_ms: u64,
 }
@@ -55,6 +56,16 @@ impl Default for HealthConfig {
             checks: Vec::new(),
             check_timeout_ms: default_check_timeout_ms(),
         }
+    }
+}
+
+impl HealthConfig {
+    /// Rejects zero and excessively long per-check deadlines before serving.
+    pub fn validate(&self) -> Result<(), crate::HealthRegistryError> {
+        if !(1..=300000).contains(&self.check_timeout_ms) {
+            return Err(crate::HealthRegistryError::InvalidTimeout);
+        }
+        Ok(())
     }
 }
 
@@ -78,6 +89,33 @@ impl fmt::Debug for ActuatorSecurity {
 }
 
 impl ActuatorConfig {
+    /// Validates endpoint names and the per-check deadline before installation.
+    /// Credentials and invalid configured names are omitted from diagnostics.
+    pub fn validate(&self) -> Result<(), crate::HealthRegistryError> {
+        self.health.validate()?;
+        if self.security.enabled
+            && self
+                .security
+                .bearer_token
+                .as_deref()
+                .is_none_or(|token| token.trim().is_empty())
+        {
+            return Err(crate::HealthRegistryError::InvalidSecurityConfiguration);
+        }
+        let known =
+            |name: &str| matches!(name, "*" | "health" | "live" | "ready" | "info" | "metrics");
+        let valid = match &self.endpoints {
+            EndpointSelection::Names(names) => names.iter().all(|name| known(name)),
+            EndpointSelection::Pattern(pattern) => {
+                pattern.is_empty() || pattern.split(',').all(|name| known(name.trim()))
+            }
+        };
+        if !valid {
+            return Err(crate::HealthRegistryError::InvalidEndpointSelection);
+        }
+        Ok(())
+    }
+
     /// Enables every actuator endpoint group.
     pub fn all() -> Self {
         Self {

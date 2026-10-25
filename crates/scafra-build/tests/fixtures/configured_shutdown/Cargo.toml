@@ -1,0 +1,11 @@
+[package]
+name = "scafra-configured-shutdown-fixture"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+scafra = { path = "../../../../scafra", features = ["web"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

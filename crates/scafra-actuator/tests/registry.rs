@@ -252,3 +252,67 @@ fn duplicate_and_empty_registration_names_are_rejected() {
         Err(HealthRegistryError::EmptyCheckName)
     ));
 }
+
+#[tokio::test]
+async fn invalid_timeouts_fail_before_evaluating_checks_in_every_entrypoint() {
+    for timeout in [0, 300001, u64::MAX] {
+        let config = ActuatorConfig {
+            health: HealthConfig {
+                check_timeout_ms: timeout,
+                ..Default::default()
+            },
+            ..ActuatorConfig::all()
+        };
+        assert_eq!(
+            config.health.validate(),
+            Err(HealthRegistryError::InvalidTimeout)
+        );
+        assert!(matches!(
+            router_with_health_registry(&config, HealthRegistry::new()),
+            Err(HealthRegistryError::InvalidTimeout)
+        ));
+        assert!(matches!(
+            scafra_actuator::try_router(&config),
+            Err(HealthRegistryError::InvalidTimeout)
+        ));
+        assert!(!HealthRegistry::new().is_healthy(&config.health).await);
+        let router = scafra_actuator::router(&config);
+        assert_eq!(
+            get(&router, "/ready").await,
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                r#"{"status":"DOWN"}"#.to_owned()
+            )
+        );
+    }
+    for timeout in [1, 300000] {
+        assert!(HealthConfig {
+            check_timeout_ms: timeout,
+            ..Default::default()
+        }
+        .validate()
+        .is_ok());
+    }
+}
+
+#[tokio::test]
+async fn custom_timeout_changes_the_health_result_for_the_same_check() {
+    for (timeout, expected) in [(5, StatusCode::SERVICE_UNAVAILABLE), (500, StatusCode::OK)] {
+        let mut registry = HealthRegistry::new();
+        registry
+            .register("delayed", || async {
+                tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+                true
+            })
+            .unwrap();
+        let config = ActuatorConfig {
+            health: HealthConfig {
+                check_timeout_ms: timeout,
+                ..Default::default()
+            },
+            ..ActuatorConfig::all()
+        };
+        let router = router_with_health_registry(&config, registry).unwrap();
+        assert_eq!(get(&router, "/ready").await.0, expected);
+    }
+}

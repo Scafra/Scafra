@@ -9,17 +9,18 @@ use std::{
 use crate::{
     errors::ConfigError,
     merge::{
-        decode_error, merge_properties, merge_yaml, parse_scalar, parse_yaml, set_path,
-        validate_profile, SOURCE_EXTENSIONS,
+        config_path_parts, decode_error, merge_properties, merge_yaml, parse_leaf_value,
+        parse_yaml, set_path, validate_profile, SOURCE_EXTENSIONS,
     },
 };
 
-const SCAFRA_ENV_CONTROLS: [&str; 5] = [
+const SCAFRA_ENV_CONTROLS: [&str; 6] = [
     "PROFILE",
     "CONFIG_DIR",
     "CONFIG_FILE",
     "DEV_CHILD",
     "DEV_RELOAD",
+    "DEV_POLL_INTERVAL_MS",
 ];
 /// Deserializes a domain YAML document without reserving framework namespaces.
 /// For framework startup use `ConfigLoader::load_validated::<ScafraConfig>()`.
@@ -339,27 +340,50 @@ impl ConfigLoader {
         if let Some(profile) = &profile {
             let config_root = source.directory();
             for extension in SOURCE_EXTENSIONS {
+                let path = config_root.join(format!("application-{profile}.{extension}"));
+                // A selected base file can also match the profile convention.
+                // Keep its base-source role while reapplying it in the existing
+                // extension order; skipping it would change precedence.
+                let allow_profile_selector = source.is_explicit_base_file(&path);
                 self.merge_file(
                     &mut merged,
                     &mut origins,
-                    config_root.join(format!("application-{profile}.{extension}")),
+                    path,
                     false,
+                    allow_profile_selector,
                 )?;
             }
         }
 
         self.merge_environment(&mut merged, &schema, &mut origins)?;
+        let mut override_paths = std::collections::BTreeSet::new();
         for (path, value) in &self.overrides {
+            let path = if self.framework_configuration {
+                canonical_framework_path(path)
+            } else {
+                path
+            };
+            if self.framework_configuration && path == "scafra.profiles.active" {
+                return Err(framework_error(path, "profile selection precedes value overrides; use ConfigLoader::profile or SCAFRA_PROFILE"));
+            }
+            if !override_paths.insert(path) {
+                return Err(framework_error(
+                    path,
+                    "duplicate canonical property and compatibility alias",
+                ));
+            }
+            let value = parse_leaf_value(value);
             if self.framework_configuration {
-                validate_framework_path(path, self.capabilities)?;
+                validate_framework_value(path, &value, self.capabilities)?;
             }
             set_path(
                 &mut merged,
                 path,
-                parse_scalar(value),
+                value,
                 "explicit override",
                 None,
                 &mut origins,
+                self.framework_configuration,
             )?;
         }
 
@@ -455,11 +479,12 @@ impl ConfigLoader {
                         origins,
                         directory.join(format!("application.{extension}")),
                         false,
+                        true,
                     )?;
                 }
             }
             ResolvedSource::File(file) => {
-                self.merge_file(target, origins, file.clone(), true)?;
+                self.merge_file(target, origins, file.clone(), true, true)?;
             }
         }
         Ok(())
@@ -516,6 +541,7 @@ impl ConfigLoader {
         origins: &mut BTreeMap<String, String>,
         path: PathBuf,
         required: bool,
+        allow_profile_selector: bool,
     ) -> Result<(), ConfigError> {
         let display_path = path.display().to_string();
         let source = match fs::read_to_string(&path) {
@@ -534,15 +560,29 @@ impl ConfigLoader {
 
         if path.extension().and_then(|extension| extension.to_str()) == Some("properties") {
             let mut input = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
-            merge_properties(&mut input, &mut BTreeMap::new(), &display_path, &source)?;
+            merge_properties(
+                &mut input,
+                &mut BTreeMap::new(),
+                &display_path,
+                &source,
+                self.framework_configuration,
+            )?;
             if self.framework_configuration {
+                validate_profile_selector_source(&input, allow_profile_selector)?;
                 validate_framework_input(&input, self.capabilities)?;
             }
-            merge_properties(target, origins, &display_path, &source)
-        } else {
-            let value = parse_yaml(&display_path, &source)?;
             if self.framework_configuration {
+                normalize_framework_aliases(&mut input)?;
+                merge_yaml(target, input, "", &display_path, origins)
+            } else {
+                merge_properties(target, origins, &display_path, &source, false)
+            }
+        } else {
+            let mut value = parse_yaml(&display_path, &source)?;
+            if self.framework_configuration {
+                validate_profile_selector_source(&value, allow_profile_selector)?;
                 validate_framework_input(&value, self.capabilities)?;
+                normalize_framework_aliases(&mut value)?;
             }
             merge_yaml(target, value, "", &display_path, origins)
         }
@@ -575,6 +615,15 @@ impl ConfigLoader {
             // Reserved unavailable modules get an actionable diagnostic even
             // though their fields are intentionally absent from the schema.
             let lower = raw_path.to_ascii_lowercase();
+            if self.framework_configuration
+                && matches!(
+                    lower.as_str(),
+                    "scafra__profiles__active" | "scafra_profiles_active"
+                )
+            {
+                return Err(framework_error("scafra.profiles.active", "profile selection precedes value overrides; use ConfigLoader::profile or SCAFRA_PROFILE"));
+            }
+
             for namespace in ["security", "actuator", "scheduler", "bootui"] {
                 if self.framework_configuration
                     && (lower == namespace || lower.starts_with(&format!("{namespace}_")))
@@ -587,11 +636,18 @@ impl ConfigLoader {
             {
                 validate_framework_path("security.jwt", self.capabilities)?;
             }
-            let path = resolve_environment_path(schema, raw_path).map_err(|()| {
-                ConfigError::InvalidValue {
-                    path: raw_path.to_ascii_lowercase(),
-                    source_kind: "environment variable name".to_owned(),
-                }
+            let path = if self.framework_configuration
+                && matches!(
+                    lower.as_str(),
+                    "server_request_timeout_seconds" | "server__request_timeout_seconds"
+                ) {
+                Ok("server.timeout".to_owned())
+            } else {
+                resolve_environment_path(schema, raw_path, self.framework_configuration)
+            }
+            .map_err(|()| ConfigError::InvalidValue {
+                path: raw_path.to_ascii_lowercase(),
+                source_kind: "environment variable name".to_owned(),
             })?;
             if origins
                 .get(&path)
@@ -609,13 +665,18 @@ impl ConfigLoader {
                 path: path.clone(),
                 source_kind: "environment".to_owned(),
             })?;
+            let value = parse_leaf_value(&value);
+            if self.framework_configuration {
+                validate_framework_value(&path, &value, self.capabilities)?;
+            }
             set_path(
                 target,
                 &path,
-                parse_scalar(&value),
+                value,
                 "environment",
                 None,
                 origins,
+                self.framework_configuration,
             )?;
         }
         Ok(())
@@ -623,6 +684,17 @@ impl ConfigLoader {
 }
 
 impl ResolvedSource {
+    fn is_explicit_base_file(&self, candidate: &Path) -> bool {
+        let Self::File(selected) = self else {
+            return false;
+        };
+        selected == candidate
+            || fs::canonicalize(selected)
+                .ok()
+                .zip(fs::canonicalize(candidate).ok())
+                .is_some_and(|(selected, candidate)| selected == candidate)
+    }
+
     fn directory(&self) -> PathBuf {
         match self {
             Self::Directory(directory) => directory.clone(),
@@ -717,12 +789,34 @@ fn invalid_source_path(path: &Path, source_kind: &str, expected: &str) -> Config
 /// Double underscores are the explicit path separator. Single-underscore
 /// names retain the historical spelling when the serialized schema identifies
 /// exactly one path.
-fn resolve_environment_path(target: &serde_yaml::Value, raw_path: &str) -> Result<String, ()> {
+fn resolve_environment_path(
+    target: &serde_yaml::Value,
+    raw_path: &str,
+    framework_configuration: bool,
+) -> Result<String, ()> {
     if raw_path.is_empty() || !valid_environment_name(raw_path) {
         return Err(());
     }
 
     if raw_path.contains("__") {
+        let explicit = raw_path.split("__").collect::<Vec<_>>();
+        if framework_configuration
+            && explicit.len() == 4
+            && explicit[0].eq_ignore_ascii_case("scheduler")
+            && explicit[1].eq_ignore_ascii_case("tasks")
+        {
+            let name = resolve_task_environment_name(explicit[2])?;
+            let parts = vec![
+                "scheduler".to_owned(),
+                "tasks".to_owned(),
+                name,
+                explicit[3].to_ascii_lowercase(),
+            ];
+            if !path_exists(target, &parts, "") {
+                return Err(());
+            }
+            return Ok(parts.join("."));
+        }
         let parts = raw_path
             .split("__")
             .map(str::to_ascii_lowercase)
@@ -738,11 +832,68 @@ fn resolve_environment_path(target: &serde_yaml::Value, raw_path: &str) -> Resul
         return Err(());
     }
     let mut candidates = std::collections::BTreeSet::new();
-    legacy_path_candidates(target, &tokens, 0, "", &mut Vec::new(), &mut candidates);
+    legacy_path_candidates(
+        target,
+        &tokens,
+        0,
+        "",
+        &mut Vec::new(),
+        &mut candidates,
+        framework_configuration,
+    );
     if candidates.len() != 1 {
         return Err(());
     }
     candidates.into_iter().next().ok_or(())
+}
+
+// Dynamic registration names are case-sensitive. Ordinary environment spelling
+// is case-insensitive only when it identifies one linked registration. The
+// explicit hex spelling also represents dots, double underscores and collisions.
+fn resolve_task_environment_name(name: &str) -> Result<String, ()> {
+    const HEX_PREFIX: &str = "TASK_HEX_";
+    if name
+        .get(..HEX_PREFIX.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(HEX_PREFIX))
+    {
+        let hex = &name[HEX_PREFIX.len()..];
+        if hex.is_empty()
+            || !hex.len().is_multiple_of(2)
+            || hex.len() > 128
+            || !hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(());
+        }
+        let bytes = (0..hex.len())
+            .step_by(2)
+            .map(|offset| u8::from_str_radix(&hex[offset..offset + 2], 16).map_err(|_| ()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let decoded = String::from_utf8(bytes).map_err(|_| ())?;
+        if decoded.is_empty()
+            || !decoded
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+        {
+            return Err(());
+        }
+        return Ok(decoded);
+    }
+    canonical_task_environment_name(name)
+}
+
+fn canonical_task_environment_name(name: &str) -> Result<String, ()> {
+    #[cfg(feature = "scheduler")]
+    {
+        let mut matches = inventory::iter::<scafra_scheduler::ScheduledTaskRegistration>()
+            .filter(|registration| registration.name.eq_ignore_ascii_case(name));
+        if let Some(registration) = matches.next() {
+            if matches.next().is_some() {
+                return Err(());
+            }
+            return Ok(registration.name.to_owned());
+        }
+    }
+    Ok(name.to_ascii_lowercase())
 }
 
 fn valid_environment_name(name: &str) -> bool {
@@ -784,6 +935,7 @@ fn legacy_path_candidates(
     parent_path: &str,
     current_path: &mut Vec<String>,
     candidates: &mut std::collections::BTreeSet<String>,
+    framework_configuration: bool,
 ) {
     if offset == tokens.len() {
         if !current_path.is_empty() {
@@ -811,7 +963,15 @@ fn legacy_path_candidates(
         }
         current_path.push(key.to_owned());
         let child_path = append_config_path(parent_path, key);
-        legacy_path_candidates(child, tokens, end, &child_path, current_path, candidates);
+        legacy_path_candidates(
+            child,
+            tokens,
+            end,
+            &child_path,
+            current_path,
+            candidates,
+            framework_configuration,
+        );
         current_path.pop();
     }
 
@@ -835,7 +995,15 @@ fn legacy_path_candidates(
             return;
         };
         for end in (offset + 1)..tokens.len() {
-            let task_name = tokens[offset..end].join("_").to_ascii_lowercase();
+            let requested = tokens[offset..end].join("_");
+            let task_name = if framework_configuration {
+                let Ok(name) = canonical_task_environment_name(&requested) else {
+                    continue;
+                };
+                name
+            } else {
+                requested.to_ascii_lowercase()
+            };
             current_path.push(task_name.clone());
             legacy_path_candidates(
                 &task_schema,
@@ -844,6 +1012,7 @@ fn legacy_path_candidates(
                 &append_config_path(parent_path, &task_name),
                 current_path,
                 candidates,
+                framework_configuration,
             );
             current_path.pop();
         }
@@ -899,6 +1068,24 @@ fn validation_config_error<T: Config>(error: &T::Error) -> ConfigError {
     }
 }
 
+// Profile selection is complete before profile-specific files are merged.
+// Only base inputs may carry the loader-owned selector; a late selector would
+// deserialize successfully but could not affect which files were selected.
+fn validate_profile_selector_source(
+    input: &serde_yaml::Value,
+    allow: bool,
+) -> Result<(), ConfigError> {
+    if !allow
+        && input
+            .get("scafra")
+            .and_then(|value| value.get("profiles"))
+            .is_some_and(|value| value.get("active").is_some())
+    {
+        return Err(framework_error("scafra.profiles.active", "profile-specific files cannot select a profile; use a base application file, ConfigLoader::profile or SCAFRA_PROFILE"));
+    }
+    Ok(())
+}
+
 /// Framework-owned namespaces are reserved when framework validation is selected.
 /// Validate each selected input before merging so an
 /// override cannot erase an unavailable security policy.
@@ -922,6 +1109,7 @@ fn framework_namespace(key: &str) -> bool {
     matches!(
         key,
         "server"
+            | "shutdown"
             | "logging"
             | "startup"
             | "security"
@@ -938,6 +1126,51 @@ fn validate_framework_value(
     capabilities: ConfigCapabilities,
 ) -> Result<(), ConfigError> {
     validate_framework_path(path, capabilities)?;
+    if path == "scheduler.tasks" {
+        if let Some(tasks) = value.as_mapping() {
+            for (name, task) in tasks {
+                let Some(name) = name.as_str() else {
+                    return Err(framework_error(path, "task names must be strings"));
+                };
+                let Some(fields) = task.as_mapping() else {
+                    return Err(framework_error(
+                        path,
+                        "each task must be an object with enabled or interval_ms fields",
+                    ));
+                };
+                for (field, value) in fields {
+                    let Some(field) = field
+                        .as_str()
+                        .filter(|field| matches!(*field, "enabled" | "interval_ms"))
+                    else {
+                        return Err(framework_error(path, "unknown scheduled task field"));
+                    };
+                    validate_framework_value(
+                        &format!("{path}.{name}.{field}"),
+                        value,
+                        capabilities,
+                    )?;
+                }
+            }
+            return Ok(());
+        }
+    }
+    if value.is_sequence() && framework_namespace(path.split('.').next().unwrap_or_default()) {
+        // Serde can deserialize some structs from positional sequences. Permit
+        // arrays only at schema-declared list leaves, so a parent sequence
+        // cannot conceal capability-gated fields from the namespace checks.
+        let schema = serde_yaml::to_value(crate::ScafraConfig::default())
+            .map_err(|_| ConfigError::Serialize)?;
+        let expected = canonical_framework_path(path)
+            .split('.')
+            .try_fold(&schema, |node, key| node.get(key));
+        if !expected.is_some_and(serde_yaml::Value::is_sequence) {
+            return Err(framework_error(
+                path,
+                "a sequence is not supported for this framework property",
+            ));
+        }
+    }
     if let Some(mapping) = value.as_mapping() {
         for (key, child) in mapping {
             let Some(key) = key.as_str() else {
@@ -983,7 +1216,15 @@ fn validate_framework_path(
             "JWT is unavailable; enable the jwt Cargo feature",
         ));
     }
-    if path == "security.jwt.jwk_set_uri" && !capabilities.jwks {
+    if matches!(
+        path,
+        "security.jwt.jwk_set_uri"
+            | "security.jwt.cache_ttl_seconds"
+            | "security.jwt.refresh_cooldown_seconds"
+            | "security.jwt.connect_timeout_ms"
+            | "security.jwt.request_timeout_ms"
+    ) && !capabilities.jwks
+    {
         return Err(framework_error(
             "security.jwt",
             "remote JWT keys are unavailable; enable the jwks Cargo feature",
@@ -998,8 +1239,10 @@ fn validate_framework_path(
             serde_yaml::from_str("profiles: {active: null}").map_err(|_| ConfigError::Serialize)?,
         );
     }
-    let normalized = path.replace("server.request_timeout_seconds", "server.timeout");
-    let parts = normalized.split('.').map(str::to_owned).collect::<Vec<_>>();
+    let parts = config_path_parts(canonical_framework_path(path), true)
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
     let dynamic_task_entry = cfg!(feature = "scheduler")
         && parts.len() == 3
         && parts[0] == "scheduler"
@@ -1033,6 +1276,36 @@ fn validate_resolved_capabilities(
     let has_secret = jwt.get("secret").is_some_and(|secret| !secret.is_null());
     if !capabilities.jwks && has_issuer && !has_secret {
         return Err(framework_error("security.jwt", "issuer discovery is unavailable; enable the jwks Cargo feature or configure a local secret"));
+    }
+    Ok(())
+}
+
+// Normalize before precedence merging. Serde aliases alone would leave both
+// spellings beside the serialized default and fail with a duplicate field.
+fn canonical_framework_path(path: &str) -> &str {
+    match path {
+        "server.request_timeout_seconds" => "server.timeout",
+        _ => path,
+    }
+}
+
+fn normalize_framework_aliases(value: &mut serde_yaml::Value) -> Result<(), ConfigError> {
+    let Some(server) = value
+        .get_mut("server")
+        .and_then(serde_yaml::Value::as_mapping_mut)
+    else {
+        return Ok(());
+    };
+    let alias = serde_yaml::Value::String("request_timeout_seconds".to_owned());
+    let canonical = serde_yaml::Value::String("timeout".to_owned());
+    if let Some(value) = server.remove(&alias) {
+        if server.contains_key(&canonical) {
+            return Err(framework_error(
+                "server.timeout",
+                "duplicate canonical property and compatibility alias",
+            ));
+        }
+        server.insert(canonical, value);
     }
     Ok(())
 }

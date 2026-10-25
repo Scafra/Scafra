@@ -52,8 +52,14 @@ fn protected_router(token: Option<&str>) -> (axum::Router, Arc<AtomicUsize>) {
         ..ActuatorConfig::all()
     };
     (
-        router_with_health_registry(&config, registry)
-            .expect("the graph-scoped test router should build"),
+        if token.is_none_or(|token| token.trim().is_empty()) {
+            assert!(router_with_health_registry(&config, registry).is_err());
+            // Legacy infallible API must still fail closed at request time.
+            scafra_actuator::router(&config)
+        } else {
+            router_with_health_registry(&config, registry)
+                .expect("valid configuration should build")
+        },
         calls,
     )
 }

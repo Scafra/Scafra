@@ -181,7 +181,13 @@ pub(crate) fn run_cargo(subcommand: &str) -> Result<()> {
 }
 
 /// Runs the application and restarts it when source or configuration files change.
-pub(crate) fn run_dev(config_dir: Option<PathBuf>, config_file: Option<PathBuf>) -> Result<()> {
+pub(crate) fn run_dev(
+    config_dir: Option<PathBuf>,
+    config_file: Option<PathBuf>,
+    poll_interval_ms: Option<String>,
+) -> Result<()> {
+    let environment = std::env::var_os("SCAFRA_DEV_POLL_INTERVAL_MS");
+    let poll_interval = resolve_poll_interval(poll_interval_ms.as_deref(), environment.as_deref())?;
     let root = std::env::current_dir().context("could not determine the project directory")?;
     let set_config_dir = config_dir.is_some();
     let set_config_file = config_file.is_some();
@@ -204,7 +210,7 @@ pub(crate) fn run_dev(config_dir: Option<PathBuf>, config_file: Option<PathBuf>)
     println!("Scafra dev: watching src, Cargo.toml, Cargo.lock, and resources");
 
     loop {
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(poll_interval);
         let current = project_snapshot(&root, selected_config.as_deref())?;
         let changed = current != snapshot;
         snapshot = current;
@@ -219,7 +225,7 @@ pub(crate) fn run_dev(config_dir: Option<PathBuf>, config_file: Option<PathBuf>)
         if child.try_wait()?.is_some() {
             println!("\nScafra dev: application stopped; waiting for the next change...");
             loop {
-                thread::sleep(Duration::from_millis(500));
+                thread::sleep(poll_interval);
                 let current = project_snapshot(&root, selected_config.as_deref())?;
                 if current != snapshot {
                     snapshot = current;
@@ -234,6 +240,30 @@ pub(crate) fn run_dev(config_dir: Option<PathBuf>, config_file: Option<PathBuf>)
             }
         }
     }
+}
+
+pub(crate) fn resolve_poll_interval(
+    explicit: Option<&str>,
+    environment: Option<&std::ffi::OsStr>,
+) -> Result<Duration> {
+    let selected = match explicit {
+        Some(value) => Some(value),
+        None => match environment {
+            Some(value) => Some(value.to_str().context(
+                "dev poll interval must be an integer between 100 and 60000 milliseconds",
+            )?),
+            None => None,
+        },
+    };
+    let milliseconds = match selected {
+        Some(value) => value
+            .parse::<u64>()
+            .ok()
+            .filter(|value| (100..=60000).contains(value))
+            .context("dev poll interval must be an integer between 100 and 60000 milliseconds")?,
+        None => 500,
+    };
+    Ok(Duration::from_millis(milliseconds))
 }
 
 fn spawn_dev_process(

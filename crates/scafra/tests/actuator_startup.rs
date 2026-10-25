@@ -35,16 +35,20 @@ async fn invalid_security_stops_startup_before_router_construction() {
         let _application_security = EnvironmentOverride::set("SCAFRA_SECURITY_ENABLED", "false");
         let _enabled = EnvironmentOverride::set("SCAFRA_ACTUATOR_SECURITY_ENABLED", "true");
         let _token = EnvironmentOverride::set("SCAFRA_ACTUATOR_SECURITY_BEARER_TOKEN", "'   '");
-        // If typed validation regresses, this malformed address makes startup
-        // return before binding a socket, so this regression test cannot hang.
-        let _host = EnvironmentOverride::set("SCAFRA_SERVER_HOST", "not-an-ip-address");
+        // Keep unrelated address validation valid; bound the startup attempt
+        // so a regression in credential validation cannot hang the test.
+        let _host = EnvironmentOverride::set("SCAFRA_SERVER_HOST", "127.0.0.1");
         let router_builder_called = AtomicBool::new(false);
 
-        let result = scafra::run_with_router(|_| {
-            router_builder_called.store(true, Ordering::Release);
-            Ok(axum::Router::new())
-        })
-        .await;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            scafra::run_with_router(|_| {
+                router_builder_called.store(true, Ordering::Release);
+                Ok(axum::Router::new())
+            }),
+        )
+        .await
+        .expect("invalid credentials must terminate startup promptly");
 
         let error = result.expect_err("invalid actuator security must stop application startup");
         let scafra::StartupError::Config(error) = error else {
@@ -68,15 +72,19 @@ async fn invalid_security_stops_startup_before_router_construction() {
         let _username = EnvironmentOverride::set("SCAFRA_SECURITY_BASIC_USERNAME", "startup-user");
         let _password =
             EnvironmentOverride::set("SCAFRA_SECURITY_BASIC_PASSWORD", BASIC_PASSWORD_SENTINEL);
-        let _host = EnvironmentOverride::set("SCAFRA_SERVER_HOST", "not-an-ip-address");
+        let _host = EnvironmentOverride::set("SCAFRA_SERVER_HOST", "127.0.0.1");
         let _port = EnvironmentOverride::set("SCAFRA_SERVER_PORT", "8080");
         let router_builder_called = AtomicBool::new(false);
 
-        let result = scafra::run_with_router(|_| {
-            router_builder_called.store(true, Ordering::Release);
-            Ok(axum::Router::new())
-        })
-        .await;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            scafra::run_with_router(|_| {
+                router_builder_called.store(true, Ordering::Release);
+                Ok(axum::Router::new())
+            }),
+        )
+        .await
+        .expect("invalid credentials must terminate startup promptly");
 
         let error = result.expect_err("a blank application token must stop startup");
         let diagnostics = format!("{error} {error:?}");

@@ -12,8 +12,8 @@ pub use crate::{
     ComponentKind, ComponentMetadata, Config, ConfigCapabilities, ConfigError, ConfigLoader,
     ConfigProperties, GraphDescriptor, GraphEdgeDescriptor, GraphError, GraphNodeDescriptor,
     GraphNodeKind, GraphPhase, GraphPlan, LogLevel, LoggingConfig, Properties, ProviderFailure,
-    ScafraConfig, ScafraError, ServerConfig, ShutdownPolicy, ShutdownReason, StartupConfig,
-    StartupError, ValidationError,
+    ScafraConfig, ScafraError, ServerConfig, ShutdownConfig, ShutdownPolicy, ShutdownReason,
+    StartupConfig, StartupError, ValidationError,
 };
 #[cfg(feature = "web")]
 pub use crate::{

@@ -13,8 +13,10 @@
 //! handwritten routes need [`guard_axum_router`] before merging. Legacy finish
 //! and raw serving APIs retain application-wide enforcement for arbitrary routes.
 
+mod connection;
 mod errors;
 mod json;
+mod limits;
 mod registration;
 mod routing;
 mod server;
@@ -35,13 +37,16 @@ pub mod __private {
     pub use inventory;
 }
 
+pub use connection::ConnectionOptions;
 pub use errors::{AppError, AuthenticationChallenge, ServerError, WebError};
 pub use json::JsonBody;
+pub use limits::with_request_body_limit;
 pub use registration::{ControllerPrefix, ControllerRegistration, ControllerRoutes, RouteMetadata};
 pub use routing::{
     build_router, build_router_with_options, default_controller_metadata, finish_managed_router,
     finish_router_with_options, guard_axum_router, join_paths, operational_router,
-    register_default_controllers, validate_routes_with_options, FinalizedRouter, RouterOptions,
+    register_default_controllers, validate_routes_with_options, with_request_timeout,
+    FinalizedRouter, RouterOptions,
 };
 #[cfg(feature = "actuator")]
 pub use routing::{
@@ -69,9 +74,10 @@ pub use scafra_security::JwtConfig;
 pub use scafra_security::{BasicAuthConfig, SecurityConfig};
 pub use server::{
     run, run_on, run_on_with_log_level, serve_application_router_with_options_and_callbacks,
-    serve_finalized_router_with_callbacks, serve_on, serve_on_with_policy, serve_on_with_shutdown,
-    serve_router_with_options_and_callbacks, shutdown_channel, ApplicationRouter, ServerOutcome,
-    ShutdownFuture, ShutdownHandle, ShutdownRequestError,
+    serve_finalized_listener_with_shutdown, serve_finalized_router_with_callbacks, serve_on,
+    serve_on_with_policy, serve_on_with_shutdown, serve_router_with_options_and_callbacks,
+    shutdown_channel, ApplicationRouter, ServerOutcome, ShutdownFuture, ShutdownHandle,
+    ShutdownRequestError,
 };
 #[cfg(all(feature = "actuator", feature = "security"))]
 pub use server::{
