@@ -1,0 +1,5 @@
+error: unknown scafra::main option; expected config_loader
+ --> tests/ui/main_unknown_option.rs:2:27
+  |
+2 |     #[scafra_macros::main(loader = configured_loader)]
+  |                           ^^^^^^

@@ -2,32 +2,31 @@
 
 Decision: **READY FOR PR REVIEW.**
 
-The implementation, twelve-crate inventory, configuration reference, regression
-coverage, independent source reviews and required local verification are complete.
-The task owner authorized the external output subtree on 2026-10-25; the full
-consumer, negative and staged package checks now pass. Hosted CI and maintainer
-approval remain separate. This status does not authorize creating a PR, committing,
-pushing, publishing packages or editing issues.
+The initial implementation was critically reassessed and three additional defects
+were reproduced and corrected: missing programmatic standard-startup injection,
+bind-failure cancellation ordering, and ConfigLoader Debug secret exposure.
+Refreshed workspace/MSRV, generated runtime, isolated consumer, negative and
+packaged-consumer checks pass. Independent follow-up review reports no unresolved
+confirmed blocker. Hosted CI and maintainer approval remain separate. No agent commit,
+push, PR, publication or remote issue change was performed.
 
 ## A. Repository state
 
 - Branch: `111-cfg-01-audit-all-scafra-defaults-and-make-operational-settings-overridable-before-100`.
   The task owner corrected the original `11-` spelling explicitly.
-- Base: `d2bb06be59e98db22e6c7d1b96181395786e3376` (merge of HTTP error work #12).
-- Original implementation began with a clean tree. This continuation resumed
-  with a clean tree at `60f2dec477d02889426115b33ed2822cad2ebb57`, which already
-  contains exactly the previously verified 70 implementation paths. The Rust,
-  manifest and lockfile fingerprint is unchanged.
-- Continuation edits are uncommitted: the negative verification fixture and this
-  report/inventory. The existing commit and all other work were preserved.
-- No agent branch creation/switch, commit, push, PR, merge, package publication,
-  release-version change, remote issue edit or unrelated repository edit.
-- Repository skills referenced by AGENTS.md were absent; the task owner explicitly
-  authorized proceeding without them. No missing skill is claimed as loaded.
-- Combined implementation/verification paths relative to the original base: **71**. Rust/manifests/lockfile source fingerprint: `553fe89f2e342cd84d5afc6e8113addcbe21724ec706d1684b6de68f0696879f`.
+- Original implementation base: `d2bb06be59e98db22e6c7d1b96181395786e3376`.
+- This correction pass began with a clean tree at `8ddf27d2e871cb34312f68de3c4584ed64356eac`.
+  Existing committed implementation was preserved; follow-up corrections remain uncommitted.
+- Combined changed paths relative to the original base: **84**.
+- Final verification fingerprint of tracked/untracked nonignored Rust files,
+  Cargo manifests and lockfile: `4728954d02ef681635c40d2a59535986006ac31d2dceede2ef6e3c80befdfcbe`. This broader file-set hash
+  replaces the earlier changed-files-only fingerprint; the hashes are not comparable.
+- No branch creation/switch, agent commit, push, PR, merge, package publication,
+  version change, remote issue edit or unrelated repository edit.
+- AGENTS-referenced repository skills were absent; the task owner explicitly
+  authorized continuing without them. No absent skill is claimed as loaded.
 
-Implementation/verification files (70 already in the resumed commit, plus the
-negative-script migration; logs/build products remain in ignored `target/`):
+Combined implementation/verification paths (logs remain ignored):
 
 - [Cargo.lock](../../Cargo.lock)
 - [Cargo.toml](../../Cargo.toml)
@@ -58,9 +57,19 @@ negative-script migration; logs/build products remain in ignored `target/`):
 - [crates/scafra-config/src/merge.rs](../../crates/scafra-config/src/merge.rs)
 - [crates/scafra-config/src/models.rs](../../crates/scafra-config/src/models.rs)
 - [crates/scafra-config/src/sources.rs](../../crates/scafra-config/src/sources.rs)
+- [crates/scafra-config/tests/debug_redaction.rs](../../crates/scafra-config/tests/debug_redaction.rs)
 - [crates/scafra-config/tests/operational.rs](../../crates/scafra-config/tests/operational.rs)
 - [crates/scafra-config/tests/scheduler_names.rs](../../crates/scafra-config/tests/scheduler_names.rs)
+- [crates/scafra-macros/src/lib.rs](../../crates/scafra-macros/src/lib.rs)
 - [crates/scafra-macros/src/main.rs](../../crates/scafra-macros/src/main.rs)
+- [crates/scafra-macros/tests/ui/main_duplicate_loader.rs](../../crates/scafra-macros/tests/ui/main_duplicate_loader.rs)
+- [crates/scafra-macros/tests/ui/main_duplicate_loader.stderr](../../crates/scafra-macros/tests/ui/main_duplicate_loader.stderr)
+- [crates/scafra-macros/tests/ui/main_loader_call.rs](../../crates/scafra-macros/tests/ui/main_loader_call.rs)
+- [crates/scafra-macros/tests/ui/main_loader_call.stderr](../../crates/scafra-macros/tests/ui/main_loader_call.stderr)
+- [crates/scafra-macros/tests/ui/main_loader_missing_value.rs](../../crates/scafra-macros/tests/ui/main_loader_missing_value.rs)
+- [crates/scafra-macros/tests/ui/main_loader_missing_value.stderr](../../crates/scafra-macros/tests/ui/main_loader_missing_value.stderr)
+- [crates/scafra-macros/tests/ui/main_unknown_option.rs](../../crates/scafra-macros/tests/ui/main_unknown_option.rs)
+- [crates/scafra-macros/tests/ui/main_unknown_option.stderr](../../crates/scafra-macros/tests/ui/main_unknown_option.stderr)
 - [crates/scafra-security/src/config.rs](../../crates/scafra-security/src/config.rs)
 - [crates/scafra-security/src/jwks.rs](../../crates/scafra-security/src/jwks.rs)
 - [crates/scafra-security/src/jwt.rs](../../crates/scafra-security/src/jwt.rs)
@@ -86,6 +95,8 @@ negative-script migration; logs/build products remain in ignored `target/`):
 - [crates/scafra/tests/config.rs](../../crates/scafra/tests/config.rs)
 - [crates/scafra/tests/foundation_api.rs](../../crates/scafra/tests/foundation_api.rs)
 - [crates/scafra/tests/operational_config.rs](../../crates/scafra/tests/operational_config.rs)
+- [crates/scafra/tests/startup_bind_cleanup.rs](../../crates/scafra/tests/startup_bind_cleanup.rs)
+- [crates/scafra/tests/startup_loader.rs](../../crates/scafra/tests/startup_loader.rs)
 - [docs/README.md](../../docs/README.md)
 - [docs/api-stability.md](../../docs/api-stability.md)
 - [docs/architecture/cfg-01-design.md](../../docs/architecture/cfg-01-design.md)
@@ -100,6 +111,7 @@ negative-script migration; logs/build products remain in ignored `target/`):
 - [docs/upgrading.md](../../docs/upgrading.md)
 - [scripts/arch103-negative.py](../../scripts/arch103-negative.py)
 - [scripts/issue111-runtime.py](../../scripts/issue111-runtime.py)
+- [scripts/issue111-startup.py](../../scripts/issue111-startup.py)
 
 ## B. Audit results
 
@@ -122,7 +134,9 @@ properties/environment overrides, positional-sequence capability bypasses,
 exotic scheduler names, ignored late profile selectors, unsafe BootUI mount/bind
 policies, partial Basic credentials, and actuator validation. Existing module
 configuration was reused; the audit did not assume that an existing struct
-alone proved consumption.
+alone proved consumption. The three reassessment defects are additional wiring,
+lifecycle and redaction corrections, not additional configuration keys; counts
+are unchanged. Their evidence is in the inventory's critical reassessment table.
 
 ## C. Configuration model
 
@@ -154,7 +168,10 @@ canonical path aliases; existing extension precedence is preserved.
 
 No runtime reflection, service locator, mutable global configuration registry
 or second loader was introduced. New startup/connection state has explicit
-owners. See the [design](cfg-01-design.md) for trade-offs and review corrections.
+owners. `run_with_loader` and `run_with_loader_and_resources` accept the caller's
+loader; `#[scafra::main(config_loader = path)]` invokes its function once after
+the original main body. A single validated result reaches address/logging,
+composition, scheduler, BootUI and cleanup. Capability masks only narrow. See the [design](cfg-01-design.md) for trade-offs and review corrections.
 
 ## D. Defaults and overrides
 
@@ -240,7 +257,11 @@ Its listener uses the same configured request/connection/drain budgets (admissio
 is per listener). Generated startup rollback and normal resource cleanup receive
 the resolved ShutdownPolicy. Synchronous hooks and scheduler callbacks cannot
 be safely forced to stop; scheduler shutdown joins them. Grace is per supported
-wait/contract, not a whole-process termination guarantee.
+wait/contract, not a whole-process termination guarantee. Resource callbacks
+receive advisory policy and must implement any deadline themselves. On serving
+failure the runner stops scheduler dispatch, requests resource cancellation,
+then joins consumers before shutting down their owners. This also covers bind
+errors where the signal callback never ran.
 
 ## F. Security review
 
@@ -259,10 +280,17 @@ follow-up diffs. Confirmed findings were evaluated and corrected:
 | H2 handler survived forced connection drain | Scoped executor abort/join; 32 two-worker iterations verify resource-cleanup ordering |
 | Scheduler special paths changed generic domain loading | Gate framework-specific splitting/environment registration handling; nested-domain regressions |
 | Selected base file rejected on profile reapplication | Preserve selected file identity/role and extension ordering, including path aliases |
+| Programmatic overrides absent from standard startup | Typed loader-taking runner APIs and generated hook; actual web/all on-wire precedence and literal example tests |
+| Bind-failure cleanup deadlocked on a dependent scheduled job | Stop dispatch, cancel dependencies, join consumers; actual occupied-port regression |
+| Loader Debug exposed programmatic secrets | Omit all override keys/values, including cloned/pretty/nested Properties diagnostics |
 
-Final targeted source and external-evidence review found no remaining confirmed blocker. Reviewer
-execution was source review plus `git diff --check`, not an independent Cargo
-run; Cargo evidence below was executed by the primary/verification agents.
+Independent follow-up reviewer `/root/reassess_http` found no remaining confirmed
+blocker in the corrective changes. The reviewer personally executed
+`cargo test -p scafra --features web,scheduler --locked --test startup_loader --test startup_bind_cleanup`
+(5 passed), `cargo test -p scafra-config --locked --test debug_redaction`
+(2 passed), and `git diff --check`. The reviewer inspected the generated script
+and its recorded results, but did not personally run that script or the entire
+workspace/MSRV suite. [Review record](../../target/cfg-111/final-verification/independent-review.json).
 
 Security suites retain missing/invalid/valid credential, role/scope, hidden404,
 unavailable feature, JWT/JWKS, redaction, nested/raw-router and GET/HEAD/header
@@ -300,6 +328,12 @@ Generated graphs gain policy-taking async composition while retaining existing
 wrappers. BootUI gains an owned lifecycle and web dependency; web-only consumers
 still exclude security/JWT/JWKS/actuator/scheduler. See [upgrading](../upgrading.md).
 
+New loader APIs and the optional macro hook are additive. Existing runner
+signatures and empty `#[scafra::main]` remain valid. Unknown macro arguments now
+produce diagnostics rather than being ignored. Debug output is deliberately
+redacted; it is not a serialization API. No new dependency, global state or
+per-request layer was introduced by these corrections.
+
 ## I. Executed verification
 
 Toolchain: Rust 1.99.1 (`58cf8f9c3`, LLVM 23.1.1), Cargo 1.99.1,
@@ -308,22 +342,27 @@ Workspace runs use `TMPDIR=$PWD/target/cfg-111/tmp` and `RUST_TEST_THREADS=2`.
 All logs and machine-readable histories are preserved locally in ignored output.
 The post-review pass records source fingerprints before and after each command.
 
-| Exact required command | Latest post-review outcome | Local log |
+| Exact required command | Final-source outcome | Local log |
 | --- | --- | --- |
-| `cargo fmt --all -- --check` | PASSED | [log](../../target/cfg-111/verification/fmt-post-review.log) |
-| `cargo check --workspace` | PASSED | [log](../../target/cfg-111/verification/check-workspace-post-review.log) |
-| `cargo test --workspace` | PASSED | [log](../../target/cfg-111/verification/test-workspace-post-review.log) |
-| `cargo clippy --workspace --all-targets -- -D warnings` | PASSED | [log](../../target/cfg-111/verification/clippy-workspace-post-review.log) |
-| `cargo check --workspace --all-features` | PASSED | [log](../../target/cfg-111/verification/check-all-features-post-review.log) |
-| `cargo test --workspace --all-features` | PASSED | [log](../../target/cfg-111/verification/test-all-features-post-review.log) |
-| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASSED | [log](../../target/cfg-111/verification/clippy-all-features-post-review.log) |
-| `cargo +1.88.0 check --workspace --all-features --locked` | PASSED | [log](../../target/cfg-111/verification/msrv-post-review.log) |
+| `cargo fmt --all -- --check` | PASSED | [log](../../target/cfg-111/final-verification/fmt-final.log) |
+| `cargo check --workspace` | PASSED | [log](../../target/cfg-111/final-verification/check-workspace-final.log) |
+| `cargo test --workspace` | PASSED | [log](../../target/cfg-111/final-verification/test-workspace-final.log) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | PASSED | [log](../../target/cfg-111/final-verification/clippy-workspace-followup.log) |
+| `cargo check --workspace --all-features` | PASSED | [log](../../target/cfg-111/final-verification/check-all-features-followup.log) |
+| `cargo test --workspace --all-features` | PASSED | [log](../../target/cfg-111/final-verification/test-all-features-followup.log) |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASSED | [log](../../target/cfg-111/final-verification/clippy-all-features-followup.log) |
+| `cargo +1.88.0 check --workspace --all-features --locked` | PASSED | [log](../../target/cfg-111/final-verification/msrv-followup.log) |
 
-Machine-readable full history: [verification/results.json](../../target/cfg-111/verification/results.json).
+Final-source command records: [final-verification/results.json](../../target/cfg-111/final-verification/results.json).
+All required rows record the same source fingerprint before and after execution.
+The first pass crossed the small scheduler-ordering correction; its affected
+format/check/default-test commands were repeated on the final source. Later
+all-feature/Clippy/MSRV rows already used that final source and were retained.
+
+Earlier machine-readable full history: [verification/results.json](../../target/cfg-111/verification/results.json).
 Earlier failed attempts are retained, including corrected old expectation/format/
 Clippy failures and the real multithreaded H2 cancellation defect; they have not
-been relabeled as passing. Frozen post-review totals: default **343 passed /0failed /2ignored** across
-73harnesses; all features **471 passed /0failed /2ignored** across86harnesses.
+been relabeled as passing. Final-source totals: default **347 passed /0 failed /2 ignored** across 76 harnesses; all features **479 passed /0 failed /2 ignored** across 89 harnesses.
 Both include18resource tests; all features includes20operational configuration
 tests and6scheduler-name tests. The ignored CLI loopback test passed separately;
 the other ignored item is the existing actuator registration documentation
@@ -356,6 +395,26 @@ verification was enabled; the framework correctly denied it. The fixture was
 corrected to use its explicitly configured Basic scheme. The passing40case
 matrix checks authentication rather than weakening the JWT fallback invariant.
 
+
+Follow-up execution also passed:
+
+| Check | Outcome / evidence |
+| --- | --- |
+| `cargo test -p scafra --no-default-features --features web --test startup_loader --locked` | PASSED; [log](../../target/cfg-111/final-verification/minimal-loader-final.log) |
+| `cargo test -p scafra-cli --test generated_projects generated_projects_serve_routes_and_shutdown_gracefully -- --ignored` | PASSED; [log](../../target/cfg-111/final-verification/generated-cli-runtime-final.log) |
+| `python3 scripts/check-api-policy.py` | PASSED; [log](../../target/cfg-111/final-verification/api-policy-final.log) |
+| `python3 -m unittest discover -s scripts -p test_api_policy.py` | PASSED; [log](../../target/cfg-111/final-verification/api-policy-drift-final.log) |
+| `python3 scripts/arch103-publish-order.py --check` | PASSED; [log](../../target/cfg-111/final-verification/publish-order-final.log) |
+| `python3 scripts/issue111-startup.py target/cfg-111/followup-generated-startup-final-v2 --target-dir target/cfg-111/generated-reviewed/target` | PASSED web/all/literal-reference consumers; [3-case results](../../target/cfg-111/followup-generated-startup-final-v2/results.json) |
+| `python3 scripts/issue111-runtime.py target/cfg-111/followup-generated-matrix --target-dir target/cfg-111/generated-reviewed/target` | PASSED 40 generated runtime cases; [results](../../target/cfg-111/followup-generated-matrix/results.json) |
+| Literal minimal programmatic reference | PASSED compile/run and dependency closure; [results](../../target/cfg-111/followup-documentation-consumer/results.json) |
+
+The new generated hook cases prove files/profile/environment/programmatic
+precedence through actual listener, body, timeout and logging behavior, a single
+hook invocation after main, BootUI effective address/profile, and SIGTERM with
+closed sockets. The exact new documentation example compiles unchanged and
+accepts 800 bytes while rejecting 801 bytes with the JSON 413 contract.
+
 ### External verification completed — 2026-10-25
 
 The task owner explicitly authorized `/var/tmp/scafra-111-verification-20261024`
@@ -363,14 +422,13 @@ and descendants. Tests used that exact subtree, with a shared temporary director
 inside it and `CARGO_BUILD_JOBS=4`. Framework configuration environment controls
 were removed from the test process environment so unrelated deployment settings
 could not alter fixtures. No publication, remote resource mutation or Git change
-was performed. The resumed checkout was clean at `60f2dec` and its production
-source matches the fingerprint used for the seven workspace checks above.
+was performed. All three external suites were rerun after the final Rust source correction.
 
 | Exact external command | Outcome | Evidence |
 | --- | --- | --- |
-| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-consumers.py /var/tmp/scafra-111-verification-20261024/consumers-msrv --proposed --runtime --target-dir /var/tmp/scafra-111-verification-20261024/consumer-target-msrv --timeout 600` | **PASSED**16isolated consumers, all lock/tree/build/runtime checks; no forbidden dependencies;168.592s | [results](../../target/cfg-111/external-results/consumers.json), [execution](../../target/cfg-111/external-results/consumers-execution.json) |
-| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-negative.py --output /var/tmp/scafra-111-verification-20261024/negative-retry --target-dir /var/tmp/scafra-111-verification-20261024/negative-target --timeout 600` | **PASSED**9negative cases;13.638s | [results](../../target/cfg-111/external-results/negative.json), [execution](../../target/cfg-111/external-results/negative-retry-execution.json) |
-| `python3 scripts/arch103-package-check.py /var/tmp/scafra-111-verification-20261024/packages --offline` | **PASSED**12packaged/extracted crates and2registry-source macro consumers;146.840s | [results](../../target/cfg-111/external-results/packages.json), [execution](../../target/cfg-111/external-results/packages-execution.json) |
+| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-consumers.py /var/tmp/scafra-111-verification-20261024/final-consumers-msrv --proposed --runtime --target-dir /var/tmp/scafra-111-verification-20261024/consumer-target-msrv --timeout 600` | **PASSED**16isolated consumers, all lock/tree/build/runtime checks; no forbidden dependencies;72.84s | [results](../../target/cfg-111/final-verification/consumers.json), [execution](../../target/cfg-111/final-verification/consumers-execution.json) |
+| `RUSTUP_TOOLCHAIN=1.88.0 python3 scripts/arch103-negative.py --output /var/tmp/scafra-111-verification-20261024/final-negative --target-dir /var/tmp/scafra-111-verification-20261024/negative-target --timeout 600` | **PASSED**9negative cases;48.014s | [results](../../target/cfg-111/final-verification/negative.json), [execution](../../target/cfg-111/final-verification/negative-execution.json) |
+| `python3 scripts/arch103-package-check.py /var/tmp/scafra-111-verification-20261024/final-packages --offline` | **PASSED**12packaged/extracted crates and2registry-source macro consumers;125.604s | [results](../../target/cfg-111/final-verification/packages.json), [execution](../../target/cfg-111/final-verification/packages-execution.json) |
 
 The consumer cases are minimal, config, core, foundation, web, secure-web,
 inventory, jwt, nested, jwks, actuator, scheduler, default, standard, bootui and
@@ -393,9 +451,9 @@ compiler101/startup1 outcomes; the verification scripts themselves exit0 on succ
 Full sources, locks, trees, archives and logs remain under the approved subtree.
 Small machine-readable results are also copied into ignored
 `target/cfg-111/external-results/`; [summary](../../target/cfg-111/external-results/summary.json).
-Independent review inspected the fixture migration, unchanged production hash,
-all16consumer rows, all9negative results and package/consumer results and found no
-remaining confirmed blocker. It did not independently execute Cargo.
+The earlier external-evidence review covered the fixture migration and catalogue.
+The follow-up source review and its personally executed tests are described in F;
+it is not claimed to independently rerun the complete external catalogue.
 
 There are no outstanding local verification or permission blockers. Hosted CI,
 published crates.io smoke tests and remote Git consumers are not claimed by this
@@ -416,7 +474,7 @@ limitations are explicit; no unsupported protocol or termination guarantee is in
 | YAML/YML/properties | PASS | Resolution matrix +real generated source modes |
 | Profile overrides | PASS | Matrix/on-wire; misplaced/late selectors reject, base-file identity preserves precedence |
 | Environment including underscores and task names | PASS | Real process environment tests, collisions/encoding/duplicates |
-| Programmatic overrides | PASS | Matrix, compiled literal example, facade TCP tests |
+| Programmatic overrides | PASS | Resolution matrix, actual generated loader hook, literal reference, authoritative facade TCP tests |
 | Precedence preserved | PASS | Cross-source/extension/profile/alias regressions |
 | Effective settings reach runtime | PASS | Generated main +typed composition +standalone consumers |
 | Invalid/unknown/unavailable settings fail early | PASS | Config/source/schema/feature/overflow/redaction negatives |
@@ -433,35 +491,35 @@ limitations are explicit; no unsupported protocol or termination guarantee is in
 | Route policy predictable | PASS | Tightening tests; no silent outer-ceiling removal |
 | Shutdown configurable and consumed | PASS | HTTP/nonforcing/H2 +generated normal/rollback resource policy tests |
 | Authentication/authorization fail closed | PASS | Security/JWT/JWKS/nested/raw/BootUI regression suites |
-| Secrets remain redacted | PASS | Diagnostics, error bodies, logs and exact BootUI snapshot tests |
+| Secrets remain redacted | PASS | Diagnostics, override Debug/Properties, error bodies, logs and exact BootUI snapshot tests |
 | Router composition does not bypass limits/security | PASS | Managed/raw/nested/global ceiling regressions |
 | Optional Cargo feature isolation | PASS | All16independent consumers checked on Rust1.88 with no forbidden normal dependencies |
 | Rust1.88workspace compatibility | PASS | Locked all-feature workspace check plus16independent MSRV consumers and9negative cases |
 | Public API migration documented | PASS | Reference/API inventory/upgrading/generated examples |
 | Generated apps compile/run | PASS | CLI matrix, six generated-main feature variants, worker, explicitignoredHTTPtest |
 | Existing HTTP status/header/error contract preserved | PASS | #12generated matrix +framework regressions |
-| Seven mandatory workspace commands | PASS | All7post-review commands exit0 on unchanged source fingerprint |
+| Seven mandatory workspace commands | PASS | All seven mandatory commands exit0 on the final source fingerprint |
 | Relevant focused crate tests | PASS | Commands/logs above, supplemented by workspace suites |
-| Default and overridden runtime behavior | PASS |40case generated matrix +host/claim/cache/health/scheduler/lifecycle tests |
+| Default and overridden runtime behavior | PASS |40-case matrix +3 new hook/reference consumers +host/claim/cache/health/scheduler/lifecycle tests |
 | Negative HTTP/resource tests | PASS |18resource tests incl32H2concurrency iterations |
 | Full feature-isolated consumer catalogue | PASS | Existing script:16/16lock/tree/build/runtime cases on Rust1.88 |
 | Security regression suites | PASS | Minimal/JWT/allfeature and workspace/runtime tests |
 | Real generated application tests | PASS | Source variants and explicitCLI loopback/graceful test |
 | Documentation examples match implementation | PASS | Literal compile/run and fixture equivalence |
-| Independent source review without unresolved confirmed blocker | PASS | Final targeted reviewer reports; no independent Cargo claim |
+| Independent source review without unresolved confirmed blocker | PASS | Source review +7 personally rerun tests; complete suite run by primary |
 | Independent negative consumer fixtures | PASS | Existing script:9/9; original fixture failures retained and corrected |
 | Staged package/registry consumer checks | PASS |12extracted packages and2version-only registry-source consumers |
 | Complete issue/local PR readiness | PASS | All required local evidence present; hosted CI and maintainer approval separate |
 
 ## K. Final decision
 
-**READY FOR PR REVIEW.** The full implementation and required local verification
-are complete, with no unresolved material issue #111 criterion or confirmed
-release-blocking finding from independent review. All seven workspace commands,
-locked Rust1.88workspace check, complete isolated MSRV consumer catalogue,
-negative suite, generated-app/runtime matrices and staged package checks pass.
-The source fingerprint is unchanged from the reviewed and workspace-tested Rust
-implementation. The only continuation code change migrates an outdated negative
-fixture to the documented public-struct construction pattern; its full suite was
-rerun successfully. Hosted CI and maintainer approval are separate. No agent
-commit, PR, push, merge, publication or issue edit was performed.
+**READY FOR PR REVIEW.** All issue #111 acceptance criteria above are resolved
+within the implemented, tested and documented contract. The three additional
+reassessment defects are corrected and independently reviewed. Seven mandatory
+workspace commands, locked Rust 1.88 check, isolated MSRV consumers, negative
+fixtures, generated runtime/documentation consumers and extracted package checks
+pass on the updated implementation. There is no unresolved confirmed release
+blocker. Advisory resource cleanup and committed/unread-stream limitations are
+explicit; no unsupported enforcement guarantee is inferred. Hosted CI and
+maintainer approval remain separate. No agent commit, PR, push, merge,
+publication or issue edit was performed.

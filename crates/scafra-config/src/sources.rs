@@ -1,7 +1,7 @@
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     collections::BTreeMap,
-    env, fs, io,
+    env, fmt, fs, io,
     marker::PhantomData,
     path::{Path, PathBuf},
 };
@@ -150,7 +150,7 @@ impl ConfigCapabilities {
 /// files, sorted environment values, then explicit overrides. Missing files
 /// in a selected directory are optional; explicitly selected directories and
 /// files must exist. Every other source failure stops loading.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConfigLoader {
     source: ConfigSource,
     profile: Option<String>,
@@ -158,6 +158,21 @@ pub struct ConfigLoader {
     overrides: BTreeMap<String, String>,
     capabilities: ConfigCapabilities,
     framework_configuration: bool,
+}
+
+impl fmt::Debug for ConfigLoader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Domain overrides may contain secrets under arbitrary keys. Neither
+        // keys nor values are safe to include in diagnostic output.
+        f.debug_struct("ConfigLoader")
+            .field("source", &self.source)
+            .field("profile", &self.profile)
+            .field("env_prefix", &self.env_prefix)
+            .field("override_count", &self.overrides.len())
+            .field("capabilities", &self.capabilities)
+            .field("framework_configuration", &self.framework_configuration)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]

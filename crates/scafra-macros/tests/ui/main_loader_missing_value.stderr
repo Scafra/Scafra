@@ -1,0 +1,7 @@
+error: expected `=`
+ --> tests/ui/main_loader_missing_value.rs:2:5
+  |
+2 |     #[scafra_macros::main(config_loader)]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `scafra_macros::main` (in Nightly builds, run with -Z macro-backtrace for more info)

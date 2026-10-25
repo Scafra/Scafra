@@ -197,3 +197,20 @@ Use `ConfigLoader::profile` or `SCAFRA_PROFILE` for runtime profile selection;
 late ordinary overrides of `scafra.profiles.active` now reject instead of being
 ignored. Enabled Basic configuration must contain both username and password,
 even when another authenticator is usable.
+
+## CFG-01 authoritative loader hook
+
+Existing entrypoints and runner signatures continue to work. Applications that
+previously loaded a separate config for overrides should instead pass their
+loader through `#[scafra::main(config_loader = crate::configured_loader)]`. For
+manual startup, `run_with_loader` and `run_with_loader_and_resources` accept it
+directly. This ensures that address, logging, scheduler, BootUI and shutdown
+consume the same validated result as router construction. The hook returns a
+`ConfigLoader`, runs once after the original entry body, and preserves the
+existing source precedence. See the [reference](configuration-reference.md#equivalent-examples).
+
+Unknown macro options now fail rather than being silently ignored. Loader
+`Debug` output omits all override names and values; use typed assertions to test
+configuration rather than inspecting diagnostic strings. Bind-failure cleanup
+now requests resource cancellation before waiting for active scheduled jobs;
+resource owners must continue to make cancellation requests idempotent.

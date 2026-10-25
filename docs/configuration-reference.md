@@ -91,7 +91,10 @@ deadlines. Resource and scheduler cancellation requests similarly do not promise
 that a synchronous callback has stopped. See the lifecycle discussion in the
 [design](architecture/cfg-01-design.md). A grace period applies to each
 policy-aware drain/cleanup wait, not an advertised whole-process wall-clock
-shutdown SLA.
+shutdown SLA. `AsyncResourceSet` callbacks receive an advisory policy: the
+framework awaits reverse cleanup, and the resource implementation must enforce
+any deadline it promises. Setting `force_after_grace: true` does not force-stop
+arbitrary resource callbacks.
 
 ### Streaming bodies and route overrides
 
@@ -424,12 +427,42 @@ let config = ConfigLoader::new()
 ```
 
 This resolves a typed value; custom composition must pass it to its consumers.
-The standard `#[scafra::main]` path already loads and forwards its own final
-validated configuration. Do not load a second value and assume the standard
-runner automatically adopts it. Lower-level composition can pass
-`scafra::router_options(&config)` to router finalization and
-`config.shutdown.policy()` to serving/resource cleanup. A supplied finalized
+To supply overrides to the generated application, pass the loader itself:
+
+```rust
+fn configured_loader() -> scafra::ConfigLoader {
+    scafra::ConfigLoader::new()
+        .config_dir("src/resources")
+        .profile("production")
+        .override_value("server.max_request_body_bytes", "800")
+        .override_value("shutdown.grace_period_seconds", "8")
+}
+
+#[scafra::main(config_loader = crate::configured_loader)]
+async fn main() {}
+```
+
+The hook is a synchronous function path returning `ConfigLoader`. It runs once
+inside the Tokio runtime, after the entry function body and before validation,
+logging, graph construction or listening. The standard runner loads that loader
+once and forwards the same final configuration to all its runtime owners,
+including the dashboard profile snapshot. Existing `#[scafra::main]` uses
+`ConfigLoader::new()` and retains its behavior. Unknown, duplicate or non-path
+macro options fail compilation.
+
+Custom entrypoints can use `scafra::run_with_loader(loader).await`, or
+`scafra::run_with_loader_and_resources(loader, |config| async move { ... })` to
+build a `FinalizedRouter` and an `AsyncResourceSet` from the authoritative
+validated configuration. These APIs require `web`, like the standard runner.
+The facade always narrows the loader's capability mask to compiled features.
+Loading a separate config does not change a running application. Lower-level
+composition can pass `scafra::router_options(&config)` to router finalization
+and `config.shutdown.policy()` to serving/resource cleanup. A supplied finalized
 router retains the options it was finalized with.
+
+`Debug` for `ConfigLoader` (also when nested in `Properties<T>`) reports source
+selection metadata and an override count, omitting all override names and
+values, including application-owned secrets.
 
 To explicitly opt out of request processing timeout, use `server.timeout=null`
 in properties, `server: {timeout: null}` in YAML/YML,

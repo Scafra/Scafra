@@ -98,3 +98,38 @@ and response deadline do not promise to stop detached WebSocket tasks.
 Properties/environment/programmatic list leaves now accept YAML flow sequences.
 Framework sequence input is allowed only at schema-declared list leaves, so
 Serde positional struct decoding cannot conceal unavailable feature intent.
+
+## Reassessment: authoritative startup overrides and error cleanup
+
+A subsequent review reproduced a bind-error cleanup cycle: the runner joined a
+scheduled callback before sending cancellation to its resource dependency. Stop
+scheduler dispatch and notify owned resources before cleanup joins on server
+errors, retaining the same
+ownership and original-error precedence. Scheduler-start errors also notify
+resources before synchronous lifecycle cleanup. Joining remains cooperative;
+this does not promise preemption of blocking callbacks.
+
+The standard runner previously always created its own ConfigLoader. Loader-only
+programmatic tests did not establish the standard six-source contract. Add two
+explicit facade entrypoints: `run_with_loader(loader)` and
+`run_with_loader_and_resources(loader, build_application)`, the latter consuming
+finalized typed graph composition. Existing entrypoints preserve their signatures
+and delegate to the same pipeline with a default loader. The caller's loader is
+narrowed to facade capabilities, resolved and validated once, before logging,
+listener address, graph/resources, scheduler, dashboard and shutdown policy.
+
+`#[scafra::main(config_loader = crate::configured_loader)]` supplies that same
+loader from a synchronous `fn() -> ConfigLoader`. It runs once after the existing
+main body and before startup resolution. This small startup hook is justified by
+the otherwise missing programmatic standard-entrypoint path; it adds no route
+annotations, runtime registry, global state or second configuration snapshot.
+Reject unknown/duplicate/malformed options with local macro diagnostics.
+
+ConfigLoader diagnostics omit every override key/value and expose only a count;
+Properties diagnostics inherit that safe representation. Neither generic domain
+credentials nor framework credentials depend on a secret-name heuristic.
+
+The existing AsyncResource shutdown contract remains advisory: implementations
+receive the policy and own their cleanup/cancellation behavior. Managed HTTP
+waits enforce their deadline. This is not an end-to-end process deadline for
+arbitrary resource callbacks, and the reference must state that distinction.

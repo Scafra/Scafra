@@ -18,7 +18,15 @@ fn server_shutdown_reason(error: &ServerError) -> ShutdownReason {
 
 /// Starts the standard Scafra server using the default local address.
 pub async fn run() -> std::result::Result<(), StartupError> {
-    run_inner(|_| async { Ok((None, ())) }).await
+    run_with_loader(ConfigLoader::new()).await
+}
+
+/// Starts the standard application using a caller-supplied configuration loader.
+/// File/profile/environment sources retain their normal precedence, followed by
+/// the loader's explicit overrides. Validation and facade capability checks run
+/// before logging, resource construction or listener startup.
+pub async fn run_with_loader(loader: ConfigLoader) -> std::result::Result<(), StartupError> {
+    run_inner(loader, |_| async { Ok((None, ())) }).await
 }
 
 /// Starts Scafra with a router composed from the application's typed graph.
@@ -34,7 +42,7 @@ pub async fn run_with_router<F>(build_router: F) -> std::result::Result<(), Star
 where
     F: FnOnce(&ScafraConfig) -> std::result::Result<axum::Router, StartupError>,
 {
-    run_inner(|config| {
+    run_inner(ConfigLoader::new(), |config| {
         let result =
             build_router(&config).map(|router| (Some(web::ApplicationRouter::Raw(router)), ()));
         async move { result }
@@ -53,7 +61,7 @@ where
     Fut: Future<Output = std::result::Result<(axum::Router, R), StartupError>>,
     R: AsyncResourceSet,
 {
-    run_inner(|config| async move {
+    run_inner(ConfigLoader::new(), |config| async move {
         build_application(config)
             .await
             .map(|(router, resources)| (Some(web::ApplicationRouter::Raw(router)), resources))
@@ -67,7 +75,7 @@ pub async fn run_with_finalized_router<F>(build_router: F) -> std::result::Resul
 where
     F: FnOnce(&ScafraConfig) -> std::result::Result<web::FinalizedRouter, StartupError>,
 {
-    run_inner(|config| {
+    run_inner(ConfigLoader::new(), |config| {
         let result = build_router(&config)
             .map(|router| (Some(web::ApplicationRouter::Finalized(router)), ()));
         async move { result }
@@ -84,7 +92,23 @@ where
     Fut: Future<Output = std::result::Result<(web::FinalizedRouter, R), StartupError>>,
     R: AsyncResourceSet,
 {
-    run_inner(|config| async move {
+    run_with_loader_and_resources(ConfigLoader::new(), build_application).await
+}
+
+/// Starts finalized typed composition with one authoritative configuration loader.
+/// The final validated configuration reaches both the builder and every standard
+/// runtime owner. A caller cannot enable unavailable facade capabilities through
+/// an independently feature-unified configuration crate.
+pub async fn run_with_loader_and_resources<F, Fut, R>(
+    loader: ConfigLoader,
+    build_application: F,
+) -> std::result::Result<(), StartupError>
+where
+    F: FnOnce(ScafraConfig) -> Fut,
+    Fut: Future<Output = std::result::Result<(web::FinalizedRouter, R), StartupError>>,
+    R: AsyncResourceSet,
+{
+    run_inner(loader, |config| async move {
         build_application(config)
             .await
             .map(|(router, resources)| (Some(web::ApplicationRouter::Finalized(router)), resources))
@@ -92,13 +116,16 @@ where
     .await
 }
 
-async fn run_inner<F, Fut, R>(build_runtime: F) -> std::result::Result<(), StartupError>
+async fn run_inner<F, Fut, R>(
+    loader: ConfigLoader,
+    build_runtime: F,
+) -> std::result::Result<(), StartupError>
 where
     F: FnOnce(ScafraConfig) -> Fut,
     Fut: Future<Output = std::result::Result<(Option<web::ApplicationRouter>, R), StartupError>>,
     R: AsyncResourceSet,
 {
-    let loader = ConfigLoader::new().capabilities(config::ConfigCapabilities {
+    let loader = loader.capabilities(config::ConfigCapabilities {
         security: cfg!(feature = "security"),
         jwt: cfg!(feature = "jwt"),
         jwks: cfg!(feature = "jwks"),
@@ -161,11 +188,11 @@ where
         Ok(scheduler) => scheduler,
         Err(error) => {
             let error = StartupError::from(error);
+            resources.request_shutdown(ShutdownReason::StartupFailure);
             if let Err(cleanup) = application.shutdown_with(ShutdownReason::StartupFailure, policy)
             {
                 __private::log_cleanup_failure(&StartupError::from(cleanup));
             }
-            resources.request_shutdown(ShutdownReason::StartupFailure);
             if let Err(cleanup) = resources
                 .shutdown(ShutdownReason::StartupFailure, policy)
                 .await
@@ -242,6 +269,11 @@ where
             (Err(StartupError::from(error.into_web_error())), reason)
         }
     };
+    // Bind/finalization failures return before the signal callback is polled.
+    // Stop dispatch before notifying dependency owners, then join consumers.
+    #[cfg(feature = "scheduler")]
+    scheduler.shutdown_handle().request_shutdown();
+    resources.request_shutdown(reason);
     #[cfg(feature = "bootui")]
     let result = {
         // Release the startup-only lock before awaiting the owned listener.
@@ -265,7 +297,6 @@ where
     };
     #[cfg(feature = "scheduler")]
     scheduler.shutdown().await;
-    resources.request_shutdown(reason);
     let shutdown = application
         .shutdown_with(reason, policy)
         .map_err(StartupError::from);

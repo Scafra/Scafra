@@ -1,0 +1,5 @@
+error: config_loader requires a function path, such as crate::configured_loader
+ --> tests/ui/main_loader_call.rs:2:43
+  |
+2 |     #[scafra_macros::main(config_loader = configured_loader())]
+  |                                           ^^^^^^^^^^^^^^^^^^^

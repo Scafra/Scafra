@@ -89,7 +89,7 @@ standalone owning crates expose their own typed constructor/configuration APIs.
 | R09 `server.http1_keep_alive` · R | [config/models.rs](../../crates/scafra-config/src/models.rs) `ServerConfig`; [web/connection.rs](../../crates/scafra-web/src/connection.rs) | `true`, bool | Hyper HTTP/1 `keep_alive` | Reuse reduces connection setup but retains transport resources. [web resources](../../crates/scafra-web/tests/resource_limits.rs) real connection-close test after finalization. | New key; wired/runtime test |
 | R10 `server.http1_max_headers` · R | [config/models.rs](../../crates/scafra-config/src/models.rs) `ServerConfig`; [web/connection.rs](../../crates/scafra-web/src/connection.rs) | `100`, usize header fields; 1–1000 | Hyper HTTP/1 `max_headers` | Bounds parser header-field work separately from bytes; default remains Hyper's historical100. [config operational](../../crates/scafra-config/tests/operational.rs) source/bounds and facade forwarding; runtime evidence recorded in ledger. | New key; wired |
 | R11 `server.http2_max_concurrent_streams` · R | [config/models.rs](../../crates/scafra-config/src/models.rs) `ServerConfig`; [web/connection.rs](../../crates/scafra-web/src/connection.rs) | `200`, u32 concurrent streams per connection; 1–10000 | Hyper HTTP/2 `max_concurrent_streams` | Adds a per-connection request concurrency ceiling for HTTP/2; connection count alone is insufficient. [web resources](../../crates/scafra-web/tests/resource_limits.rs) `configured_header_count_and_http2_stream_concurrency_are_effective` observes only one handler until the first stream releases; config source/bounds tests. | New key; wired/runtime test |
-| R12 `shutdown.grace_period_seconds` · R | [config/models.rs](../../crates/scafra-config/src/models.rs) `ShutdownConfig`; [foundation/shutdown.rs](../../crates/scafra-foundation/src/shutdown.rs) | `30`, u64 seconds; 1–86400 | `ShutdownConfig::policy` → runner, web drain, lifecycle, generated resource cleanup | Cooperative async deadline, not preemption of blocking callbacks. [facade runtime](../../crates/scafra/tests/operational_config.rs) pending HTTP request with configured grace; generated lifecycle tests cover cleanup paths. | New key; wired/runtime test |
+| R12 `shutdown.grace_period_seconds` · R | [config/models.rs](../../crates/scafra-config/src/models.rs) `ShutdownConfig`; [foundation/shutdown.rs](../../crates/scafra-foundation/src/shutdown.rs) | `30`, u64 seconds; 1–86400 | `ShutdownConfig::policy` → runner, web drain, lifecycle, generated resource cleanup | HTTP drain enforces the deadline; resource callbacks receive advisory policy and implement their own deadlines. No preemption of blocking callbacks. [facade runtime](../../crates/scafra/tests/operational_config.rs) pending HTTP request with configured grace; generated lifecycle tests cover cleanup paths. | New key; wired/runtime test |
 | R13 `shutdown.force_after_grace` · R | [config/models.rs](../../crates/scafra-config/src/models.rs) `ShutdownConfig`; [foundation/shutdown.rs](../../crates/scafra-foundation/src/shutdown.rs) | `true`, bool | Same policy consumers select bounded/unbounded waiting | False is explicit unbounded waiting; true cannot undo external effects. [operational resolution](../../crates/scafra-config/tests/operational.rs), [web shutdown tests](../../crates/scafra-web/src/tests.rs), [core tests](../../crates/scafra-core/src/tests.rs) explicit policy; ledger distinguishes each path executed. | New key; wired |
 
 ### Foundation and startup
@@ -275,3 +275,19 @@ The task owner authorized the exact output subtree on2026-10-25. These outcomes
 are independently recorded and are not inferred from workspace success. See the
 [final review](cfg-01-final-review.md) for commands, logs, preserved failed attempt,
 unchanged production-source fingerprint and final independent review.
+
+## Critical reassessment follow-up
+
+Three gaps were reproduced after the first completed audit. They did not add
+new configuration keys or change the inventory counts:
+
+| Finding | Correction and effective consumer | Regression evidence |
+| --- | --- | --- |
+| Programmatic overrides were not injectable into standard startup | `run_with_loader` / `run_with_loader_and_resources` accept the authoritative loader; `#[scafra::main(config_loader = path)]` supplies it once. The existing facade capability mask still narrows the input. Address, logging, graph, scheduler, BootUI profile and shutdown share its validated result. | [startup_loader.rs](../../crates/scafra/tests/startup_loader.rs), [generated runtime script](../../scripts/issue111-startup.py), macro parser/compile-fail tests |
+| Bind failure waited on a scheduled callback before requesting its dependent resource cancellation | Standard runner requests resource cancellation immediately after the serving result, before any cleanup join. Scheduler-start failure also cancels before lifecycle cleanup. | [startup_bind_cleanup.rs](../../crates/scafra/tests/startup_bind_cleanup.rs), actual occupied loopback port with an active dependent job |
+| `ConfigLoader` derived Debug exposed programmatic secrets | Manual Debug omits all override keys/values regardless of field name; `Properties<T>` inherits that redaction. This is an X15-style fixed redaction invariant, not a configurable exception. | [debug_redaction.rs](../../crates/scafra-config/tests/debug_redaction.rs), ordinary/pretty/cloned/nested diagnostics |
+
+No framework-wide process shutdown deadline is claimed: reverse resource
+cleanup awaits user-owned callbacks, whose `ShutdownPolicy` is advisory. Managed
+HTTP enforces its own configured drain deadline. Cancellation cannot preempt
+non-cooperative synchronous callbacks.

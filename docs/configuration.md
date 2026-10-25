@@ -221,3 +221,12 @@ processing deadlines. `server.request_timeout_seconds` remains an input alias,
 normalized per source; duplicate spellings in one source fail. List-valued leaves
 use YAML sequences, including flow syntax in properties/environment values.
 See [migration guidance](upgrading.md#configuration-and-resource-protection-cfg-01).
+
+## Programmatic standard startup
+
+Use `#[scafra::main(config_loader = crate::configured_loader)]` to supply a
+function returning `ConfigLoader`. The hook runs once after the entry body; its
+explicit overrides take precedence over files, profiles and environment before
+the single validated configuration reaches the entire standard runtime. Custom
+entrypoints can use `run_with_loader` or `run_with_loader_and_resources` (web
+feature). See the [working example and contracts](configuration-reference.md#equivalent-examples).

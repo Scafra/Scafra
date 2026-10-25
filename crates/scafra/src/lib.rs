@@ -68,8 +68,8 @@ pub type Result<T> = std::result::Result<T, AppError>;
 mod startup;
 #[cfg(feature = "web")]
 pub use startup::{
-    router_options, run, run_with_finalized_resources, run_with_finalized_router,
-    run_with_resources, run_with_router,
+    router_options, run, run_with_finalized_resources, run_with_finalized_router, run_with_loader,
+    run_with_loader_and_resources, run_with_resources, run_with_router,
 };
 #[doc(hidden)]
 #[path = "private.rs"]
