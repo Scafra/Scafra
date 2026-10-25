@@ -192,9 +192,10 @@ selected. Do not use a router-only helper to drop managed async resources early.
 
 HTTP-free core hooks and scheduler consumption are supported. A supervised
 production worker entrypoint remains #49, outside this implementation. BootUI
-retains its existing task model: a post-bind extension task served on its own
-listener, ending when the owning runtime ends. It is not a second application
-lifecycle owner or a promise of separately graceful dashboard draining.
+starts after the application binds and serves an owned managed task on its own
+listener. The runner requests its drain and joins it before releasing
+application resources; the same configured shutdown policy applies. A manually
+started dashboard can retain `BootUiServer` and await its shutdown.
 BootUI loopback mode requires real `ConnectInfo<SocketAddr>`; an in-memory Tower
 test must supply that metadata rather than expecting a peerless request to pass.
 Dashboard snapshots remain an explicit allow-list of server/profile data.
@@ -256,3 +257,15 @@ credentials remain release operations, not something this task performs.
 See [implementation results](architecture/arch-01/implementation.md) for exact
 commands, measurements, acceptance status and remaining verification limits.
 The Phase 0 baseline files remain historical before-refactor evidence.
+
+## Operational configuration
+
+The [canonical reference](configuration-reference.md) lists module-owned runtime
+settings and feature requirements. The [twelve-crate audit](architecture/configurability-audit.md)
+traces them to consumers. Managed HTTP now uses Hyper's auto connection builder
+for HTTP/1 and HTTP/2 with validated connection admission, header budgets and
+transport inactivity. HTTP/2 adds `h2` dependencies to web-only consumers; it
+does not pull in authentication/JWKS. BootUI uses the same managed server
+policies per listener; the standard runner owns and joins its `BootUiServer`.
+Raw Axum embedding retains server ownership. CLI dev polling is a supervisor
+control (`--poll-interval-ms`, `SCAFRA_DEV_POLL_INTERVAL_MS`), not application YAML.

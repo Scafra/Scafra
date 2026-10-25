@@ -1,7 +1,7 @@
 #[cfg(all(feature = "actuator", feature = "security"))]
 use std::time::Duration;
 use std::{
-    future::{Future, IntoFuture},
+    future::Future,
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -18,7 +18,7 @@ use crate::errors::{ServerError, WebError};
 /// The successful result of a server lifecycle boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServerOutcome {
-    reason: ShutdownReason,
+    pub(crate) reason: ShutdownReason,
 }
 
 impl ServerOutcome {
@@ -228,7 +228,11 @@ pub async fn serve_on_with_policy_and_actuator_and_security(
     security: scafra_security::SecurityConfig,
 ) -> Result<ServerOutcome, ServerError> {
     serve_on_with_policy_and_actuator_and_security_and_request_timeout(
-        address, policy, actuator, security, None,
+        address,
+        policy,
+        actuator,
+        security,
+        crate::RouterOptions::default().request_timeout,
     )
     .await
 }
@@ -311,6 +315,7 @@ where
             actuator,
             security,
             request_timeout,
+            ..Default::default()
         },
         None,
     )
@@ -400,6 +405,7 @@ where
             actuator,
             security,
             request_timeout,
+            ..Default::default()
         },
         Some(ApplicationRouter::Raw(router)),
     )
@@ -518,6 +524,11 @@ where
             format!("invalid security configuration: {reason}"),
         )))
     })?;
+    options.validate().map_err(ServerError::from)?;
+    let connection = match &supplied_router {
+        Some(ApplicationRouter::Finalized(router)) => router.connection.clone(),
+        _ => options.connection.clone(),
+    };
     let router = match supplied_router {
         // Supplied routers may contain generated controllers registered through
         // their low-level adapters. Never assume the caller already installed
@@ -541,9 +552,32 @@ where
     }
     scafra_foundation::startup!(%address, "Scafra server started");
 
-    serve_listener(listener, router, shutdown, policy).await
+    crate::connection::serve(listener, router, shutdown, policy, connection).await
 }
 
+/// Serves a finalized router on an application-owned listener and shutdown future.
+/// Resolved connection settings remain attached to the finalized router.
+pub async fn serve_finalized_listener_with_shutdown<F>(
+    listener: TcpListener,
+    router: crate::FinalizedRouter,
+    shutdown: F,
+    policy: ShutdownPolicy,
+) -> Result<ServerOutcome, ServerError>
+where
+    F: Future<Output = ShutdownReason> + Send + 'static,
+{
+    let connection = router.connection.clone();
+    crate::connection::serve(
+        listener,
+        router.into_router(),
+        async move { Ok(shutdown.await) },
+        policy,
+        connection,
+    )
+    .await
+}
+
+#[cfg(test)]
 pub(crate) async fn serve_listener<F>(
     listener: TcpListener,
     router: axum::Router,
@@ -553,62 +587,7 @@ pub(crate) async fn serve_listener<F>(
 where
     F: Future<Output = Result<ShutdownReason, WebError>> + Send + 'static,
 {
-    let (trigger_sender, mut trigger_receiver) = oneshot::channel();
-    let graceful_shutdown = async move {
-        let trigger = shutdown.await;
-        let _ = trigger_sender.send(trigger);
-    };
-    let service = router.into_make_service_with_connect_info::<SocketAddr>();
-    let server = axum::serve(listener, service)
-        .with_graceful_shutdown(graceful_shutdown)
-        .into_future();
-    tokio::pin!(server);
-
-    let trigger = tokio::select! {
-        // Axum completes its serving future as soon as the graceful-shutdown
-        // future resolves. Prefer the trigger channel when both become ready
-        // in the same poll, so a successful shutdown is not mistaken for an
-        // unsolicited server exit.
-        biased;
-        trigger = &mut trigger_receiver => trigger.unwrap_or_else(|_| {
-            Err(WebError::Server(std::io::Error::other(
-                "Scafra shutdown trigger stopped unexpectedly",
-            )))
-        }),
-        result = &mut server => {
-            return match result {
-                Ok(()) => Err(ServerError::from(WebError::Server(std::io::Error::other(
-                    "Scafra server stopped before a shutdown request",
-                )))),
-                Err(source) => Err(ServerError::from(WebError::Server(source))),
-            };
-        }
-    };
-
-    let (reason, trigger_error) = match trigger {
-        Ok(reason) => (reason, None),
-        Err(error) => (ShutdownReason::RuntimeFailure, Some(error)),
-    };
-    scafra_foundation::info!(?reason, "Scafra server shutting down");
-
-    let server_result = if policy.force_after_grace() {
-        match tokio::time::timeout(policy.grace_period(), &mut server).await {
-            Ok(result) => result,
-            Err(_) => {
-                return Err(ServerError::GracefulShutdownTimeout { reason, policy });
-            }
-        }
-    } else {
-        (&mut server).await
-    };
-
-    match server_result {
-        Err(source) => Err(ServerError::from(WebError::Server(source))),
-        Ok(()) => match trigger_error {
-            Some(error) => Err(ServerError::from(error)),
-            None => Ok(ServerOutcome { reason }),
-        },
-    }
+    crate::connection::serve(listener, router, shutdown, policy, Default::default()).await
 }
 
 async fn shutdown_signal() -> Result<ShutdownReason, WebError> {

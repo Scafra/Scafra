@@ -39,6 +39,7 @@ pub(crate) fn merge_properties(
     origins: &mut BTreeMap<String, String>,
     path: &str,
     source: &str,
+    framework_configuration: bool,
 ) -> Result<(), ConfigError> {
     for (line_index, line) in source.lines().enumerate() {
         let line_number = line_index + 1;
@@ -55,15 +56,27 @@ pub(crate) fn merge_properties(
             ));
         };
         let key = trimmed[..separator].trim();
-        if key.is_empty() || key.split('.').any(|part| part.trim().is_empty()) {
+        if key.is_empty()
+            || config_path_parts(key, framework_configuration)
+                .iter()
+                .any(|part| part.trim().is_empty())
+        {
             return Err(property_parse_error(
                 path,
                 line_number,
                 "invalid dotted key",
             ));
         }
-        let value = parse_scalar(trimmed[separator + 1..].trim());
-        set_path(target, key, value, path, Some(line_number), origins)?;
+        let value = parse_leaf_value(trimmed[separator + 1..].trim());
+        set_path(
+            target,
+            key,
+            value,
+            path,
+            Some(line_number),
+            origins,
+            framework_configuration,
+        )?;
     }
     Ok(())
 }
@@ -77,9 +90,11 @@ fn property_parse_error(path: &str, line: usize, message: &'static str) -> Confi
     }
 }
 
-pub(crate) fn parse_scalar(value: &str) -> serde_yaml::Value {
+/// Parses scalar and sequence leaves. Objects must use dotted keys so
+/// namespace and capability validation can inspect their complete paths.
+pub(crate) fn parse_leaf_value(value: &str) -> serde_yaml::Value {
     match serde_yaml::from_str::<serde_yaml::Value>(value) {
-        Ok(value) if !value.is_mapping() && !value.is_sequence() => value,
+        Ok(value) if !value.is_mapping() => value,
         _ => serde_yaml::Value::String(value.to_owned()),
     }
 }
@@ -133,8 +148,9 @@ pub(crate) fn set_path(
     source: &str,
     line: Option<usize>,
     origins: &mut BTreeMap<String, String>,
+    framework_configuration: bool,
 ) -> Result<(), ConfigError> {
-    let parts = path.split('.').collect::<Vec<_>>();
+    let parts = config_path_parts(path, framework_configuration);
     if parts.is_empty() || parts.iter().any(|part| part.is_empty()) {
         return Err(ConfigError::InvalidValue {
             path: path.to_owned(),
@@ -142,6 +158,20 @@ pub(crate) fn set_path(
         });
     }
     set_path_parts(target, &parts, value, path, source, line, origins)
+}
+
+/// A scheduled task name is a literal map key. The final segment identifies
+/// its typed property; dots inside the name must not create nested objects.
+pub(crate) fn config_path_parts(path: &str, framework_configuration: bool) -> Vec<&str> {
+    if let Some(task_path) = path
+        .strip_prefix("scheduler.tasks.")
+        .filter(|_| framework_configuration)
+    {
+        if let Some((name, field)) = task_path.rsplit_once('.') {
+            return vec!["scheduler", "tasks", name, field];
+        }
+    }
+    path.split('.').collect()
 }
 
 fn set_path_parts(

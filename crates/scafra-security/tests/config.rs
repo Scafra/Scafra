@@ -13,6 +13,11 @@ fn defaults_and_partial_configuration_deserialize_consistently() {
     assert!(config.basic.password.is_none());
     assert!(config.permit_all.is_empty());
     assert!(!config.jwt.enabled);
+    assert_eq!(config.jwt.leeway_seconds, 60);
+    assert_eq!(config.jwt.cache_ttl_seconds, 300);
+    assert_eq!(config.jwt.refresh_cooldown_seconds, 30);
+    assert_eq!(config.jwt.connect_timeout_ms, 2000);
+    assert_eq!(config.jwt.request_timeout_ms, 5000);
     assert_eq!(config.validate(), Ok(()));
 
     let config: SecurityConfig =
@@ -21,6 +26,124 @@ fn defaults_and_partial_configuration_deserialize_consistently() {
     assert!(config.enabled);
     assert_eq!(config.bearer_token.as_deref(), Some("configured-token"));
     assert_eq!(config.validate(), Ok(()));
+}
+
+#[cfg(feature = "jwks")]
+#[test]
+fn remote_policy_bounds_are_validated_even_when_authentication_is_disabled() {
+    let cases = [
+        ("cache_ttl_seconds", 0),
+        ("cache_ttl_seconds", 86401),
+        ("refresh_cooldown_seconds", 0),
+        ("refresh_cooldown_seconds", 3601),
+        ("connect_timeout_ms", 0),
+        ("connect_timeout_ms", 300001),
+        ("request_timeout_ms", 0),
+        ("request_timeout_ms", 300001),
+    ];
+    for (field, value) in cases {
+        let mut input = serde_json::to_value(JwtConfig::default()).unwrap();
+        input[field] = value.into();
+        let config = SecurityConfig {
+            jwt: serde_json::from_value(input).unwrap(),
+            ..Default::default()
+        };
+        let error = config.validate().expect_err("invalid policy must fail");
+        assert!(error.contains(field), "{field}: {error}");
+    }
+    for jwt in [
+        JwtConfig {
+            cache_ttl_seconds: 5,
+            refresh_cooldown_seconds: 6,
+            ..Default::default()
+        },
+        JwtConfig {
+            connect_timeout_ms: 50,
+            request_timeout_ms: 49,
+            ..Default::default()
+        },
+    ] {
+        assert!(SecurityConfig {
+            jwt,
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+    }
+    assert!(SecurityConfig {
+        jwt: JwtConfig {
+            cache_ttl_seconds: 86400,
+            refresh_cooldown_seconds: 3600,
+            connect_timeout_ms: 300000,
+            request_timeout_ms: 300000,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+    .validate()
+    .is_ok());
+}
+
+#[cfg(not(feature = "jwks"))]
+#[test]
+fn unavailable_remote_policy_is_rejected_even_with_authentication_disabled() {
+    for field in [
+        "cache_ttl_seconds",
+        "refresh_cooldown_seconds",
+        "connect_timeout_ms",
+        "request_timeout_ms",
+    ] {
+        let mut input = serde_json::to_value(JwtConfig::default()).unwrap();
+        input[field] = 1.into();
+        let config = SecurityConfig {
+            jwt: serde_json::from_value(input).unwrap(),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err(), "{field}");
+    }
+}
+
+#[test]
+fn remote_policy_deserialization_rejects_negative_and_overflowing_values() {
+    for field in [
+        "leeway_seconds",
+        "cache_ttl_seconds",
+        "refresh_cooldown_seconds",
+        "connect_timeout_ms",
+        "request_timeout_ms",
+    ] {
+        for value in ["-1", "18446744073709551616"] {
+            let input = format!("{{\"{field}\":{value}}}");
+            assert!(serde_json::from_str::<JwtConfig>(&input).is_err());
+        }
+    }
+}
+
+#[cfg(feature = "jwt")]
+#[test]
+fn jwt_clock_skew_is_bounded_and_can_be_disabled_explicitly() {
+    for leeway in [0, 300] {
+        assert!(SecurityConfig {
+            jwt: JwtConfig {
+                leeway_seconds: leeway,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+        .validate()
+        .is_ok());
+    }
+    assert_eq!(
+        SecurityConfig {
+            jwt: JwtConfig {
+                leeway_seconds: 301,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+        .validate(),
+        Err("JWT leeway_seconds must be between 0 and 300 seconds")
+    );
 }
 
 #[test]
@@ -308,4 +431,65 @@ fn config_serialization_continues_to_omit_basic_and_jwt_secrets() {
     let serialized = serde_json::to_string(&config).expect("config should serialize");
     assert!(!serialized.contains(BASIC_PASSWORD_SECRET));
     assert!(!serialized.contains(JWT_SECRET));
+}
+
+#[cfg(feature = "jwt")]
+#[test]
+fn enabled_jwt_rejects_blank_required_scopes_without_disclosing_credentials() {
+    for scope in ["", " ", "\t", " \r\n "] {
+        let config = SecurityConfig {
+            jwt: JwtConfig {
+                enabled: true,
+                secret: Some("scope-validation-secret".to_owned()),
+                required_scopes: vec![scope.to_owned()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let error = config
+            .validate()
+            .expect_err("blank scope must fail before serving");
+        assert_eq!(
+            error,
+            "JWT required_scopes must not contain empty or whitespace-only values"
+        );
+        assert!(!format!("{error} {config:?}").contains("scope-validation-secret"));
+    }
+    for scopes in [vec![], vec!["profile.read".to_owned()]] {
+        let config = SecurityConfig {
+            jwt: JwtConfig {
+                enabled: true,
+                secret: Some("scope-validation-secret".to_owned()),
+                required_scopes: scopes,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+}
+
+#[test]
+fn incomplete_basic_intent_is_not_silently_ignored_when_bearer_is_usable() {
+    for basic in [
+        BasicAuthConfig {
+            username: Some("username-sentinel".into()),
+            password: None,
+        },
+        BasicAuthConfig {
+            username: None,
+            password: Some("password-sentinel".into()),
+        },
+    ] {
+        let config = SecurityConfig {
+            enabled: true,
+            bearer_token: Some("bearer-sentinel".into()),
+            basic,
+            ..Default::default()
+        };
+        assert_eq!(
+            config.validate().unwrap_err(),
+            "basic authentication requires both username and password"
+        );
+    }
 }

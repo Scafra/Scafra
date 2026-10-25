@@ -139,7 +139,7 @@ fn generated_startup_logging_redacts_invalid_address_messages() {
 }
 
 #[tokio::test]
-async fn facade_runner_orders_config_logging_and_address_validation_before_startup() {
+async fn facade_runner_rejects_invalid_configuration_before_logging_and_startup() {
     let profile = "../foundation-api-secret-profile";
     let previous_profile = std::env::var_os("SCAFRA_PROFILE");
     std::env::set_var("SCAFRA_PROFILE", profile);
@@ -166,14 +166,17 @@ async fn facade_runner_orders_config_logging_and_address_validation_before_start
     let address_error = scafra::run()
         .await
         .expect_err("an invalid address must fail before application startup");
-    assert!(matches!(address_error, scafra::StartupError::Address(_)));
+    assert!(matches!(
+        address_error,
+        scafra::StartupError::Config(scafra::ConfigError::Validation(_))
+    ));
     assert!(
         !address_error.to_string().contains("invalid-host-secret"),
         "configured address must not be echoed in startup diagnostics: {address_error}"
     );
     assert!(
-        capture_error_backtrace().is_some(),
-        "valid configuration must initialize foundation before address validation"
+        capture_error_backtrace().is_none(),
+        "invalid host configuration must fail before logging or resource startup"
     );
 
     restore_environment("SCAFRA_SERVER_HOST", previous_host);

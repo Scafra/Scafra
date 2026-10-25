@@ -12,6 +12,7 @@ axum.workspace = true
 scafra-config = { workspace = true, features = ["bootui", "security"] }
 scafra-core.workspace = true
 scafra-security.workspace = true
+scafra-web = { workspace = true, features = ["security"] }
 inventory.workspace = true
 serde.workspace = true
 tokio.workspace = true

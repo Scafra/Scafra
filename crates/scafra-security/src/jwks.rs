@@ -10,10 +10,6 @@ use tokio::{
     time::Instant,
 };
 
-const CACHE_LIFETIME: Duration = Duration::from_secs(5 * 60);
-const REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone)]
@@ -58,17 +54,45 @@ pub(super) struct JwkKey {
 }
 
 impl JwksCache {
-    pub(super) fn new() -> Self {
-        Self::with_policy(CACHE_LIFETIME, REFRESH_COOLDOWN, REQUEST_TIMEOUT)
+    pub(super) fn new(config: &JwtConfig) -> Self {
+        // Infallible middleware constructors fail closed for invalid settings.
+        // Do not construct transport timers using values validation rejected.
+        let fallback = JwtConfig::default();
+        let config = if config.validate_remote_policy().is_ok() {
+            config
+        } else {
+            &fallback
+        };
+        Self::with_timeouts(
+            Duration::from_secs(config.cache_ttl_seconds),
+            Duration::from_secs(config.refresh_cooldown_seconds),
+            Duration::from_millis(config.connect_timeout_ms),
+            Duration::from_millis(config.request_timeout_ms),
+        )
     }
 
+    #[cfg(test)]
     fn with_policy(
         cache_lifetime: Duration,
         refresh_cooldown: Duration,
         request_timeout: Duration,
     ) -> Self {
+        Self::with_timeouts(
+            cache_lifetime,
+            refresh_cooldown,
+            request_timeout,
+            request_timeout,
+        )
+    }
+
+    fn with_timeouts(
+        cache_lifetime: Duration,
+        refresh_cooldown: Duration,
+        connect_timeout: Duration,
+        request_timeout: Duration,
+    ) -> Self {
         let client = reqwest::Client::builder()
-            .connect_timeout(request_timeout.min(CONNECT_TIMEOUT))
+            .connect_timeout(connect_timeout)
             .timeout(request_timeout)
             // Provider redirects can change the configured destination. Requiring
             // an explicit configured URL keeps discovery and key retrieval bounded.

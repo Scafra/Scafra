@@ -105,6 +105,7 @@ impl HealthRegistry {
     /// selection can be corrected; credentials from actuator security settings
     /// are not part of this error.
     pub fn validate(&self, config: &HealthConfig) -> Result<(), HealthRegistryError> {
+        config.validate()?;
         let mut registered = HashSet::new();
         for check in &self.checks {
             if !registered.insert(check.name.as_str()) {
@@ -134,7 +135,7 @@ impl HealthRegistry {
     /// configuration, a `false` result, timeout, or an unwinding panic.
     pub async fn is_healthy(&self, config: &HealthConfig) -> bool {
         if self.validate(config).is_err() {
-            tracing::error!("actuator health configuration references unknown checks");
+            tracing::error!("invalid actuator health configuration");
             return false;
         }
         health::evaluate(self, config).await
@@ -171,6 +172,12 @@ impl HealthRegistry {
 /// An invalid application-scoped health registry or selection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HealthRegistryError {
+    /// Endpoint selection contains an unsupported group name.
+    InvalidEndpointSelection,
+    /// The per-check timeout must be between 1 and 300000 milliseconds.
+    InvalidTimeout,
+    /// Enabled actuator protection requires a nonblank credential.
+    InvalidSecurityConfiguration,
     /// Registration names cannot be empty or whitespace-only.
     EmptyCheckName,
     /// A registry cannot contain two checks with the same name.
@@ -184,6 +191,9 @@ pub enum HealthRegistryError {
 impl fmt::Display for HealthRegistryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidEndpointSelection => formatter.write_str("actuator.endpoints must contain only health, live, ready, info, metrics, or *"),
+            Self::InvalidSecurityConfiguration => formatter.write_str("actuator.security.bearer_token must be nonblank when protection is enabled"),
+            Self::InvalidTimeout => formatter.write_str("actuator.health.check_timeout_ms must be between 1 and 300000 milliseconds"),
             Self::EmptyCheckName => formatter.write_str("health check names cannot be empty"),
             Self::DuplicateCheckName(name) => {
                 write!(

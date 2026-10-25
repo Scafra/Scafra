@@ -12,14 +12,15 @@ pub use crate::{
     ComponentKind, ComponentMetadata, Config, ConfigCapabilities, ConfigError, ConfigLoader,
     ConfigProperties, GraphDescriptor, GraphEdgeDescriptor, GraphError, GraphNodeDescriptor,
     GraphNodeKind, GraphPhase, GraphPlan, LogLevel, LoggingConfig, Properties, ProviderFailure,
-    ScafraConfig, ScafraError, ServerConfig, ShutdownPolicy, ShutdownReason, StartupConfig,
-    StartupError, ValidationError,
+    ScafraConfig, ScafraError, ServerConfig, ShutdownConfig, ShutdownPolicy, ShutdownReason,
+    StartupConfig, StartupError, ValidationError,
 };
 #[cfg(feature = "web")]
 pub use crate::{
-    build_router, controller, delete, get, main, post, put, routes, AppError,
-    AuthenticationChallenge, ControllerPrefix, ControllerRegistration, ControllerRoutes, JsonBody,
-    Result, RouteMetadata, ServerError, ServerOutcome, WebError,
+    build_router, controller, delete, get, main, post, put, routes, run_with_loader,
+    run_with_loader_and_resources, AppError, AuthenticationChallenge, ControllerPrefix,
+    ControllerRegistration, ControllerRoutes, JsonBody, Result, RouteMetadata, ServerError,
+    ServerOutcome, WebError,
 };
 #[cfg(feature = "actuator")]
 pub use crate::{register_health_check, ActuatorConfig, HealthRegistry, HealthRegistryError};

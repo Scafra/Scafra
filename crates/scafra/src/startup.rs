@@ -18,7 +18,15 @@ fn server_shutdown_reason(error: &ServerError) -> ShutdownReason {
 
 /// Starts the standard Scafra server using the default local address.
 pub async fn run() -> std::result::Result<(), StartupError> {
-    run_inner(|_| async { Ok((None, ())) }).await
+    run_with_loader(ConfigLoader::new()).await
+}
+
+/// Starts the standard application using a caller-supplied configuration loader.
+/// File/profile/environment sources retain their normal precedence, followed by
+/// the loader's explicit overrides. Validation and facade capability checks run
+/// before logging, resource construction or listener startup.
+pub async fn run_with_loader(loader: ConfigLoader) -> std::result::Result<(), StartupError> {
+    run_inner(loader, |_| async { Ok((None, ())) }).await
 }
 
 /// Starts Scafra with a router composed from the application's typed graph.
@@ -34,7 +42,7 @@ pub async fn run_with_router<F>(build_router: F) -> std::result::Result<(), Star
 where
     F: FnOnce(&ScafraConfig) -> std::result::Result<axum::Router, StartupError>,
 {
-    run_inner(|config| {
+    run_inner(ConfigLoader::new(), |config| {
         let result =
             build_router(&config).map(|router| (Some(web::ApplicationRouter::Raw(router)), ()));
         async move { result }
@@ -53,7 +61,7 @@ where
     Fut: Future<Output = std::result::Result<(axum::Router, R), StartupError>>,
     R: AsyncResourceSet,
 {
-    run_inner(|config| async move {
+    run_inner(ConfigLoader::new(), |config| async move {
         build_application(config)
             .await
             .map(|(router, resources)| (Some(web::ApplicationRouter::Raw(router)), resources))
@@ -67,7 +75,7 @@ pub async fn run_with_finalized_router<F>(build_router: F) -> std::result::Resul
 where
     F: FnOnce(&ScafraConfig) -> std::result::Result<web::FinalizedRouter, StartupError>,
 {
-    run_inner(|config| {
+    run_inner(ConfigLoader::new(), |config| {
         let result = build_router(&config)
             .map(|router| (Some(web::ApplicationRouter::Finalized(router)), ()));
         async move { result }
@@ -84,7 +92,23 @@ where
     Fut: Future<Output = std::result::Result<(web::FinalizedRouter, R), StartupError>>,
     R: AsyncResourceSet,
 {
-    run_inner(|config| async move {
+    run_with_loader_and_resources(ConfigLoader::new(), build_application).await
+}
+
+/// Starts finalized typed composition with one authoritative configuration loader.
+/// The final validated configuration reaches both the builder and every standard
+/// runtime owner. A caller cannot enable unavailable facade capabilities through
+/// an independently feature-unified configuration crate.
+pub async fn run_with_loader_and_resources<F, Fut, R>(
+    loader: ConfigLoader,
+    build_application: F,
+) -> std::result::Result<(), StartupError>
+where
+    F: FnOnce(ScafraConfig) -> Fut,
+    Fut: Future<Output = std::result::Result<(web::FinalizedRouter, R), StartupError>>,
+    R: AsyncResourceSet,
+{
+    run_inner(loader, |config| async move {
         build_application(config)
             .await
             .map(|(router, resources)| (Some(web::ApplicationRouter::Finalized(router)), resources))
@@ -92,13 +116,16 @@ where
     .await
 }
 
-async fn run_inner<F, Fut, R>(build_runtime: F) -> std::result::Result<(), StartupError>
+async fn run_inner<F, Fut, R>(
+    loader: ConfigLoader,
+    build_runtime: F,
+) -> std::result::Result<(), StartupError>
 where
     F: FnOnce(ScafraConfig) -> Fut,
     Fut: Future<Output = std::result::Result<(Option<web::ApplicationRouter>, R), StartupError>>,
     R: AsyncResourceSet,
 {
-    let loader = ConfigLoader::new().capabilities(config::ConfigCapabilities {
+    let loader = loader.capabilities(config::ConfigCapabilities {
         security: cfg!(feature = "security"),
         jwt: cfg!(feature = "jwt"),
         jwks: cfg!(feature = "jwks"),
@@ -131,9 +158,12 @@ where
     if config.startup.banner {
         print_startup_banner(&config, &loader, &profile);
     }
-    let address = format!("{}:{}", config.server.host, config.server.port)
-        .parse()
-        .map_err(|error: std::net::AddrParseError| StartupError::Address(error.to_string()))?;
+    let ip = config
+        .server
+        .host
+        .parse::<std::net::IpAddr>()
+        .map_err(|error| StartupError::Address(error.to_string()))?;
+    let address = std::net::SocketAddr::new(ip, config.server.port);
     let (router, resources) = build_runtime(config.clone()).await?;
     let context = ApplicationContext::discover();
     startup!(
@@ -144,7 +174,7 @@ where
     if let Err(error) = application.start() {
         resources.request_shutdown(ShutdownReason::StartupFailure);
         if let Err(cleanup) = resources
-            .shutdown(ShutdownReason::StartupFailure, ShutdownPolicy::default())
+            .shutdown(ShutdownReason::StartupFailure, config.shutdown.policy())
             .await
         {
             __private::log_cleanup_failure(&StartupError::from(cleanup));
@@ -152,17 +182,17 @@ where
         return Err(StartupError::from(error));
     }
     startup!("application lifecycle started");
-    let policy = ShutdownPolicy::default();
+    let policy = config.shutdown.policy();
     #[cfg(feature = "scheduler")]
     let scheduler = match Scheduler::try_start(&config.scheduler) {
         Ok(scheduler) => scheduler,
         Err(error) => {
             let error = StartupError::from(error);
+            resources.request_shutdown(ShutdownReason::StartupFailure);
             if let Err(cleanup) = application.shutdown_with(ShutdownReason::StartupFailure, policy)
             {
                 __private::log_cleanup_failure(&StartupError::from(cleanup));
             }
-            resources.request_shutdown(ShutdownReason::StartupFailure);
             if let Err(cleanup) = resources
                 .shutdown(ShutdownReason::StartupFailure, policy)
                 .await
@@ -178,18 +208,48 @@ where
     #[cfg(feature = "scheduler")]
     let scheduler_shutdown = scheduler.shutdown_handle();
     let resources_shutdown = Arc::clone(&resources);
+    #[cfg(feature = "bootui")]
+    let bootui_server = Arc::new(std::sync::Mutex::new(None::<scafra_bootui::BootUiServer>));
+    #[cfg(feature = "bootui")]
+    let bootui_shutdown = Arc::clone(&bootui_server);
+    #[cfg(feature = "bootui")]
+    let bootui_startup = Arc::clone(&bootui_server);
     let on_shutdown_requested = move |reason| {
         #[cfg(feature = "scheduler")]
         scheduler_shutdown.request_shutdown();
+        #[cfg(feature = "bootui")]
+        if let Some(server) = bootui_shutdown
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_mut()
+        {
+            server.request_shutdown();
+        }
         resources_shutdown.request_shutdown(reason);
     };
     let extension_config = config.clone();
     let extension_profile = profile.clone();
     let on_server_started = move || {
+        #[cfg(feature = "bootui")]
+        match scafra_bootui::start_managed_with_config(&extension_config, &extension_profile) {
+            Ok(server) => {
+                *bootui_startup
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = server;
+            }
+            Err(_) => scafra_foundation::error!(
+                error_kind = "bootui_configuration",
+                "BootUI could not start with the configured policy"
+            ),
+        }
         let mut extensions =
             inventory::iter::<scafra_config::ConfiguredExtensionRegistration>().collect::<Vec<_>>();
         extensions.sort_by_key(|extension| extension.name);
         for extension in extensions {
+            #[cfg(feature = "bootui")]
+            if extension.name == "scafra-bootui" {
+                continue;
+            }
             (extension.start)(&extension_config, &extension_profile);
         }
     };
@@ -209,9 +269,34 @@ where
             (Err(StartupError::from(error.into_web_error())), reason)
         }
     };
+    // Bind/finalization failures return before the signal callback is polled.
+    // Stop dispatch before notifying dependency owners, then join consumers.
+    #[cfg(feature = "scheduler")]
+    scheduler.shutdown_handle().request_shutdown();
+    resources.request_shutdown(reason);
+    #[cfg(feature = "bootui")]
+    let result = {
+        // Release the startup-only lock before awaiting the owned listener.
+        let server = bootui_server
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let cleanup = match server {
+            Some(server) => server.shutdown().await.map_err(StartupError::from),
+            None => Ok(()),
+        };
+        match (result, cleanup) {
+            (Ok(()), cleanup) => cleanup,
+            (Err(error), cleanup) => {
+                if let Err(cleanup) = cleanup {
+                    __private::log_cleanup_failure(&cleanup);
+                }
+                Err(error)
+            }
+        }
+    };
     #[cfg(feature = "scheduler")]
     scheduler.shutdown().await;
-    resources.request_shutdown(reason);
     let shutdown = application
         .shutdown_with(reason, policy)
         .map_err(StartupError::from);
@@ -269,9 +354,7 @@ fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader, profile: &
     ];
     let logo = logo
         .iter()
-        .map(|line| {
-            paint(line, "38;2;255;107;53;1", color)
-        })
+        .map(|line| paint(line, "38;2;255;107;53;1", color))
         .collect::<Vec<_>>()
         .join("\n");
     let label = |value: &str| paint(value, "38;5;208;1", color);
@@ -282,7 +365,11 @@ fn print_startup_banner(config: &ScafraConfig, loader: &ConfigLoader, profile: &
         paint(env!("CARGO_PKG_VERSION"), "37", color),
         label("server"),
         paint(
-            &format!("http://{}:{}", config.server.host, config.server.port),
+            &if config.server.host.contains(':') {
+                format!("http://[{}]:{}", config.server.host, config.server.port)
+            } else {
+                format!("http://{}:{}", config.server.host, config.server.port)
+            },
             "37",
             color
         ),
@@ -318,6 +405,18 @@ pub fn router_options(config: &ScafraConfig) -> web::RouterOptions {
         actuator: config.actuator.clone(),
         #[cfg(feature = "security")]
         security: config.security.clone(),
+        max_request_body_bytes: config.server.max_request_body_bytes,
+        connection: web::ConnectionOptions {
+            header_read_timeout: std::time::Duration::from_secs(
+                config.server.header_read_timeout_seconds,
+            ),
+            idle_timeout: std::time::Duration::from_secs(config.server.idle_timeout_seconds),
+            max_connections: config.server.max_connections,
+            max_header_bytes: config.server.max_header_bytes,
+            http1_keep_alive: config.server.http1_keep_alive,
+            http1_max_headers: config.server.http1_max_headers,
+            http2_max_concurrent_streams: config.server.http2_max_concurrent_streams,
+        },
         request_timeout: config
             .server
             .request_timeout_seconds

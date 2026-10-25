@@ -193,16 +193,22 @@ Debug builds do not change public exposure.
 ## Limits and interoperability
 
 `JsonBody` reports 413 for Axum's extractor size limit and 500 for unexpected
-body-stream/buffering errors. Framework finalization still installs a 1 MiB
-extractor limit. A route-specific `DefaultBodyLimit` remains supported. These
-are extractor limits, not a universal cap on raw body handlers.
+body-stream/buffering errors. Framework finalization installs a configurable 1 MiB extractor limit and a
+streaming hard ceiling (`server.max_request_body_bytes`) for raw bodies too.
+An exceeded stream is dropped and cannot deliver additional data. A handler
+that swallows the error before returning still receives the framework 413.
+Unread bodies are not drained; errors discovered after response headers commit
+terminate the stream rather than changing its status. A route-specific
+`DefaultBodyLimit` remains supported; it cannot raise the enclosing hard ceiling.
 
 Configured processing deadlines cancel the handler future and return 504 with
 `request_timeout`. The deadline wins if both deadline and pending handler become
 ready on the same poll, preserving the previous Tower semantics. It does not
 bound response-body streaming, roll back external side effects, or preempt
-blocking code. There is still no default processing deadline. Configurable raw
-body protection, default deadlines and connection/header policies remain #19.
+blocking code. The default is 30 seconds; `server.timeout: null` explicitly disables it.
+Header-read and transport inactivity limits belong to the managed listener.
+See the [configuration reference](configuration-reference.md) for exact scope,
+route overrides and connection policies.
 
 After applicable authentication/authorization checks, unknown routes and
 unsupported methods retain native Axum 404/405, including `Allow`. Native extractors, user responses and status-bearing successful health
@@ -222,8 +228,7 @@ The workspace is still 0.1.0. This implementation does not declare the proposed
   validated `basic(realm)` for the scheme actually implemented. Update patterns
   to `AppError::Unauthorized(_)`. Existing web/facade/prelude paths export the
   challenge type with the same `web` feature boundary.
-- Direct security setup failures (including invalid actuator token configuration)
-  now return 500 `internal_error` instead of 401 `unauthorized`. They remain
+- Legacy infallible security setup failures return 500 `internal_error` instead of 401 `unauthorized`. They remain
   fail-closed; genuine missing/invalid/expired credentials retain 401 with their
   configured challenges, and role/scope denial retains 403.
 - `Validation(String)` now redacts its string. Replace deliberate safe messages

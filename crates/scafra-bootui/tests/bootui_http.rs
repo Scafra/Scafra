@@ -272,3 +272,130 @@ fn local_only_false_fails_closed_without_explicit_valid_authentication() {
             | Err(BootUiPolicyError::InvalidSecurityConfiguration)
     ));
 }
+
+#[test]
+fn invalid_dashboard_paths_return_errors_instead_of_panicking() {
+    for path in [
+        "/",
+        "/{",
+        "/{*rest}",
+        "/:legacy",
+        "/a?secret",
+        "/a#secret",
+        "/a\\b",
+        "/a\nsecret",
+    ] {
+        let mut config = scafra_config::ScafraConfig::default();
+        config.bootui.enabled = true;
+        config.bootui.path = path.to_owned();
+        assert!(
+            matches!(
+                scafra_bootui::try_layer_with_config(axum::Router::new(), &config),
+                Err(scafra_bootui::BootUiPolicyError::InvalidPath)
+            ),
+            "invalid path must be rejected"
+        );
+    }
+}
+
+#[tokio::test]
+async fn owned_dashboard_uses_effective_resource_limits_and_is_joined_on_shutdown() {
+    use std::time::Duration;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpListener, TcpStream},
+    };
+    let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = reservation.local_addr().unwrap();
+    drop(reservation);
+    let mut config = scafra_config::ScafraConfig::default();
+    config.bootui.enabled = true;
+    config.bootui.port = address.port();
+    config.server.max_request_body_bytes = 8;
+    config.server.header_read_timeout_seconds = 1;
+    config.server.idle_timeout_seconds = 1;
+    let owner = scafra_bootui::start_managed_with_config(&config, "effective-profile")
+        .unwrap()
+        .unwrap();
+    let mut client = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if let Ok(client) = TcpStream::connect(address).await {
+                break client;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    client.write_all(b"GET /bootui/config HTTP/1.1\r\nHost: localhost\r\nContent-Length: 9\r\nConnection: close\r\n\r\n123456789").await.unwrap();
+    let mut bytes = Vec::new();
+    client.read_to_end(&mut bytes).await.unwrap();
+    let response = String::from_utf8(bytes).unwrap();
+    assert!(response.starts_with("HTTP/1.1 413"));
+    assert!(response.contains("payload_too_large"));
+    let mut client = TcpStream::connect(address).await.unwrap();
+    client
+        .write_all(b"GET /bootui HTTP/1.1\r\nHost: incomplete")
+        .await
+        .unwrap();
+    let mut bytes = Vec::new();
+    tokio::time::timeout(Duration::from_secs(3), client.read_to_end(&mut bytes))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(bytes.is_empty() || String::from_utf8_lossy(&bytes).starts_with("HTTP/1.1 408"));
+    owner.shutdown().await.unwrap();
+    assert!(TcpStream::connect(address).await.is_err());
+}
+
+#[tokio::test]
+async fn managed_nonlocal_dashboard_cannot_inherit_application_permit_all() {
+    use std::time::Duration;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpListener, TcpStream},
+    };
+    let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = reservation.local_addr().unwrap();
+    drop(reservation);
+    let mut config = scafra_config::ScafraConfig::default();
+    config.bootui.enabled = true;
+    config.bootui.port = address.port();
+    config.bootui.local_only = false;
+    config.security.enabled = true;
+    config.security.bearer_token = Some("managed-ui-token".into());
+    config.security.permit_all = vec![
+        "/bootui/api/config".into(),
+        "/api/config".into(),
+        "/config".into(),
+    ];
+    let owner = scafra_bootui::start_managed_with_config(&config, "effective-profile")
+        .unwrap()
+        .unwrap();
+    for token in [None, Some("wrong-token"), Some("managed-ui-token")] {
+        let mut client = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                if let Ok(client) = TcpStream::connect(address).await {
+                    break client;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let authorization = token
+            .map(|token| format!("Authorization: Bearer {token}\r\n"))
+            .unwrap_or_default();
+        client.write_all(format!("GET /bootui/api/config HTTP/1.1\r\nHost: localhost\r\n{authorization}Connection: close\r\n\r\n").as_bytes()).await.unwrap();
+        let mut bytes = Vec::new();
+        client.read_to_end(&mut bytes).await.unwrap();
+        let response = String::from_utf8(bytes).unwrap();
+        if token == Some("managed-ui-token") {
+            assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+            assert!(!response.contains("managed-ui-token"));
+        } else {
+            assert!(response.starts_with("HTTP/1.1 401"), "{response}");
+        }
+    }
+    owner.shutdown().await.unwrap();
+}

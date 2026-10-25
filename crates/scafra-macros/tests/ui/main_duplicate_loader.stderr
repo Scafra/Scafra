@@ -1,0 +1,5 @@
+error: duplicate config_loader option
+ --> tests/ui/main_duplicate_loader.rs:2:50
+  |
+2 |     #[scafra_macros::main(config_loader = first, config_loader = second)]
+  |                                                  ^^^^^^^^^^^^^

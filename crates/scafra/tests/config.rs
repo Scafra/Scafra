@@ -137,7 +137,7 @@ fn request_timeout_loads_with_precedence_and_is_validated() {
     );
 
     let default = ScafraConfig::default();
-    assert_eq!(default.server.request_timeout_seconds, None);
+    assert_eq!(default.server.request_timeout_seconds, Some(30));
     fs::remove_dir_all(root).unwrap();
 }
 

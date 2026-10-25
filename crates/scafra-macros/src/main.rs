@@ -3,7 +3,50 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::{collections::BTreeMap, env, fs, path::PathBuf};
-use syn::{Error, ItemFn, LitStr, Result, ReturnType};
+use syn::{
+    parse::{Parse, ParseStream},
+    Error, Expr, ItemFn, LitStr, Path, Result, ReturnType, Token,
+};
+
+#[derive(Default)]
+struct MainOptions {
+    config_loader: Option<Path>,
+}
+
+impl Parse for MainOptions {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let mut options = Self::default();
+        while !input.is_empty() {
+            let key: syn::Ident = input.parse()?;
+            if key != "config_loader" {
+                return Err(Error::new_spanned(
+                    key,
+                    "unknown scafra::main option; expected config_loader",
+                ));
+            }
+            if options.config_loader.is_some() {
+                return Err(Error::new_spanned(key, "duplicate config_loader option"));
+            }
+            input.parse::<Token![=]>()?;
+            let value: Expr = input.parse()?;
+            match value {
+                Expr::Path(value) if value.qself.is_none() => {
+                    options.config_loader = Some(value.path);
+                }
+                value => {
+                    return Err(Error::new_spanned(
+                        value,
+                        "config_loader requires a function path, such as crate::configured_loader",
+                    ))
+                }
+            }
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
+        }
+        Ok(options)
+    }
+}
 
 #[derive(Default)]
 struct ModuleTree {
@@ -11,12 +54,20 @@ struct ModuleTree {
     children: BTreeMap<String, ModuleTree>,
 }
 
-pub(crate) fn expand_main(item: TokenStream) -> Result<proc_macro2::TokenStream> {
+pub(crate) fn expand_main(
+    attr: TokenStream,
+    item: TokenStream,
+) -> Result<proc_macro2::TokenStream> {
+    let options = syn::parse2::<MainOptions>(attr)?;
     let input = syn::parse2::<ItemFn>(item)?;
-    expand_main_item(input)
+    expand_main_with_options(input, options)
 }
 
 pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream> {
+    expand_main_with_options(input, MainOptions::default())
+}
+
+fn expand_main_with_options(input: ItemFn, options: MainOptions) -> Result<TokenStream> {
     if input.sig.ident != "main" {
         return Err(Error::new_spanned(
             &input.sig.ident,
@@ -44,6 +95,10 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
     let attrs = input.attrs;
     let vis = input.vis;
     let body = input.block;
+    let loader = match options.config_loader {
+        Some(path) => quote!(#path()),
+        None => quote!(::scafra::ConfigLoader::new()),
+    };
     let modules = discover_modules()?;
     let graph_source = scafra_build::render_application_graph(
         PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest was checked"))
@@ -92,8 +147,10 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
             };
             runtime.block_on(async {
                     #body
-                    if let Err(error) = ::scafra::run_with_finalized_resources(|config| async move {
-                        let graph = __scafra_graph::compose_async().await?;
+                    if let Err(error) = ::scafra::run_with_loader_and_resources(#loader, |config| async move {
+                        let graph = __scafra_graph::compose_async_with_policy(
+                            __scafra_graph::Overrides::default(), config.shutdown.policy(),
+                        ).await?;
                         let (router, resources) = graph.build_finalized_router_with_options_and_resources(
                             &::scafra::router_options(&config),
                         );
@@ -103,7 +160,7 @@ pub(crate) fn expand_main_item(input: ItemFn) -> Result<proc_macro2::TokenStream
                                 if let Err(cleanup) = ::scafra::core::AsyncResourceSet::shutdown(
                                     &resources,
                                     ::scafra::ShutdownReason::StartupFailure,
-                                    ::scafra::ShutdownPolicy::default(),
+                                    config.shutdown.policy(),
                                 ).await {
                                     ::scafra::__private::log_cleanup_failure(
                                         &::scafra::StartupError::from(cleanup),

@@ -210,6 +210,135 @@ fn protected_router(issuer: &str, jwk_set_uri: Option<String>) -> Router {
     )
 }
 
+fn configured_remote_router(uri: String, policy: JwtConfig) -> Router {
+    layer(
+        Router::new().route("/resource", get(|| async { "authorized" })),
+        SecurityConfig {
+            enabled: true,
+            jwt: JwtConfig {
+                enabled: true,
+                issuer_uri: Some("https://issuer.test".to_owned()),
+                jwk_set_uri: Some(uri),
+                audiences: vec!["scafra-test-api".to_owned()],
+                ..policy
+            },
+            ..Default::default()
+        },
+    )
+}
+
+#[tokio::test]
+async fn configured_cache_lifetime_expires_keys_and_fails_closed_on_refresh_failure() {
+    let (uri, provider) = serve_controlled(valid_jwks()).await;
+    let router = configured_remote_router(
+        uri,
+        JwtConfig {
+            cache_ttl_seconds: 1,
+            refresh_cooldown_seconds: 1,
+            ..Default::default()
+        },
+    );
+    let jwt = token("https://issuer.test", KEY_ID);
+    assert_eq!(authorize(router.clone(), &jwt).await.0, StatusCode::OK);
+    provider
+        .replace(StatusCode::SERVICE_UNAVAILABLE, "provider-secret")
+        .await;
+    assert_eq!(authorize(router.clone(), &jwt).await.0, StatusCode::OK);
+    assert_eq!(provider.request_count(), 1);
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    let (status, body) = authorize(router, &jwt).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(provider.request_count(), 2);
+    assert!(!body.contains("provider-secret"));
+}
+
+#[tokio::test]
+async fn configured_cooldown_limits_unknown_key_refreshes_and_then_allows_rotation() {
+    let (uri, provider) = serve_controlled(valid_jwks()).await;
+    let router = configured_remote_router(
+        uri,
+        JwtConfig {
+            refresh_cooldown_seconds: 1,
+            ..Default::default()
+        },
+    );
+    let jwt = token("https://issuer.test", KEY_ID);
+    assert_eq!(authorize(router.clone(), &jwt).await.0, StatusCode::OK);
+    let rotated = token("https://issuer.test", "new-key");
+    assert_eq!(
+        authorize(router.clone(), &rotated).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(provider.request_count(), 2);
+    provider
+        .replace(StatusCode::OK, valid_jwks_for("new-key").to_string())
+        .await;
+    assert_eq!(
+        authorize(router.clone(), &rotated).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(provider.request_count(), 2);
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    assert_eq!(authorize(router, &rotated).await.0, StatusCode::OK);
+    assert_eq!(provider.request_count(), 3);
+}
+
+#[tokio::test]
+async fn configured_provider_deadline_cancels_slow_retrieval_without_disclosing_provider_data() {
+    let (uri, provider) = serve_controlled(valid_jwks()).await;
+    let gate = provider.block_responses().await;
+    let router = configured_remote_router(
+        uri,
+        JwtConfig {
+            connect_timeout_ms: 10,
+            request_timeout_ms: 30,
+            ..Default::default()
+        },
+    );
+    let started = std::time::Instant::now();
+    let (status, body) = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        authorize(router, &token("https://issuer.test", KEY_ID)),
+    )
+    .await
+    .expect("configured provider deadline must complete authentication");
+    gate.release.add_permits(1);
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    assert!(!body.contains("issuer.test"));
+    assert_eq!(provider.request_count(), 1);
+}
+
+#[tokio::test]
+async fn configured_connect_deadline_bounds_a_stalled_tls_handshake() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        // A connected TCP peer that never answers the TLS ClientHello keeps
+        // transport setup incomplete without relying on an external network.
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        drop(stream);
+    });
+    let router = configured_remote_router(
+        format!("https://{address}/keys"),
+        JwtConfig {
+            connect_timeout_ms: 30,
+            request_timeout_ms: 2000,
+            ..Default::default()
+        },
+    );
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        authorize(router, &token("https://issuer.test", KEY_ID)),
+    )
+    .await;
+    provider.abort();
+    let (status, _) =
+        result.expect("connect deadline must expire before the total provider deadline");
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
 async fn authorize(router: Router, jwt: &str) -> (StatusCode, String) {
     let response = router
         .oneshot(

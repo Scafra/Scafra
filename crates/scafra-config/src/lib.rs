@@ -9,7 +9,9 @@ mod sources;
 pub use errors::ConfigError;
 #[doc(hidden)]
 pub use extensions::ConfiguredExtensionRegistration;
-pub use models::{BootUiConfig, ScafraConfig, ServerConfig, StartupConfig, ValidationError};
+pub use models::{
+    BootUiConfig, ScafraConfig, ServerConfig, ShutdownConfig, StartupConfig, ValidationError,
+};
 pub use scafra_foundation::{BacktraceMode, LogLevel, LoggingConfig};
 #[cfg(feature = "scheduler")]
 pub use scafra_scheduler::{SchedulerConfig, SchedulerConfigError};

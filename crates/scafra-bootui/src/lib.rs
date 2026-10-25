@@ -19,10 +19,111 @@ inventory::submit! {
     }
 }
 
+/// Owned dashboard server started from the application's effective configuration.
+/// Dropping the owner cancels its async serving task; synchronous user code is
+/// cooperative and cannot be forcibly interrupted.
+pub struct BootUiServer {
+    shutdown: scafra_web::ShutdownHandle,
+    task:
+        Option<tokio::task::JoinHandle<Result<scafra_web::ServerOutcome, scafra_web::ServerError>>>,
+}
+impl BootUiServer {
+    pub fn request_shutdown(&mut self) {
+        let _ = self.shutdown.request();
+    }
+    pub async fn shutdown(mut self) -> Result<(), scafra_web::WebError> {
+        self.request_shutdown();
+        if let Some(task) = self.task.as_mut() {
+            let result = task
+                .await
+                .map_err(|_| {
+                    scafra_web::WebError::Server(std::io::Error::other(
+                        "BootUI serving task failed",
+                    ))
+                })?
+                .map(|_| ())
+                .map_err(scafra_web::ServerError::into_web_error);
+            self.task.take();
+            result
+        } else {
+            Ok(())
+        }
+    }
+}
+impl Drop for BootUiServer {
+    fn drop(&mut self) {
+        if let Some(task) = &self.task {
+            task.abort();
+        }
+    }
+}
+
+#[allow(clippy::needless_update)] // Actuator is enabled only in some feature unions.
+fn managed_router(
+    config: &ScafraConfig,
+    prepared: PreparedBootUi,
+) -> Result<scafra_web::FinalizedRouter, BootUiPolicyError> {
+    use std::time::Duration;
+    let mut security = config.security.clone();
+    // The outer context is authoritative. The dashboard must not inherit
+    // application permit_all exceptions at either composition boundary.
+    security.permit_all.clear();
+    let options = scafra_web::RouterOptions {
+        security,
+        request_timeout: config
+            .server
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+        max_request_body_bytes: config.server.max_request_body_bytes,
+        connection: scafra_web::ConnectionOptions {
+            header_read_timeout: Duration::from_secs(config.server.header_read_timeout_seconds),
+            idle_timeout: Duration::from_secs(config.server.idle_timeout_seconds),
+            max_connections: config.server.max_connections,
+            max_header_bytes: config.server.max_header_bytes,
+            http1_keep_alive: config.server.http1_keep_alive,
+            http1_max_headers: config.server.http1_max_headers,
+            http2_max_concurrent_streams: config.server.http2_max_concurrent_streams,
+        },
+        ..Default::default()
+    };
+    scafra_web::finish_managed_router(prepared.router, &[], &options)
+        .map_err(|_| BootUiPolicyError::InvalidServerConfiguration)
+}
+
+/// Starts an owned dashboard using the same request, connection and drain
+/// budgets as the main managed listener. The runner requests shutdown before
+/// draining HTTP and joins this owner before releasing application resources.
+pub fn start_managed_with_config(
+    config: &ScafraConfig,
+    profile: &str,
+) -> Result<Option<BootUiServer>, BootUiPolicyError> {
+    let Some(prepared) = prepare(config, profile)? else {
+        return Ok(None);
+    };
+    let address = prepared.address;
+    let router = managed_router(config, prepared)?;
+    let policy = config.shutdown.policy();
+    let (shutdown, signal) = scafra_web::shutdown_channel();
+    let task = tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind(address)
+            .await
+            .map_err(|source| {
+                tracing::error!(error_kind = "bootui_bind", "BootUI listener could not bind");
+                scafra_web::ServerError::from(scafra_web::WebError::Bind { address, source })
+            })?;
+        tracing::info!(target: "scafra::startup", %address, "Scafra BootUI started");
+        scafra_web::serve_finalized_listener_with_shutdown(listener, router, signal, policy).await
+    });
+    Ok(Some(BootUiServer {
+        shutdown,
+        task: Some(task),
+    }))
+}
+
 /// Starts BootUI from Scafra's already resolved application configuration.
 ///
-/// The standard runner invokes this after the application listener binds. The
-/// snapshot is created from the same validated configuration and active
+/// Compatibility API for independently started dashboards. The standard runner
+/// uses [`start_managed_with_config`] and owns its shutdown. The snapshot is created from the same validated configuration and active
 /// profile used by the application.
 /// Invalid or unsafe bind policies are logged and prevent the listener from
 /// starting.
@@ -40,28 +141,31 @@ pub fn start_with_config(config: &ScafraConfig, profile: &str) {
         }
     };
 
+    let address = prepared.address;
+    let router = match managed_router(config, prepared) {
+        Ok(router) => router,
+        Err(_) => {
+            tracing::error!(
+                error_kind = "bootui_server_configuration",
+                "BootUI server configuration rejected"
+            );
+            return;
+        }
+    };
+    let policy = config.shutdown.policy();
     tokio::spawn(async move {
-        let address = prepared.address;
-        let path = prepared.path.clone();
-        let listener = match tokio::net::TcpListener::bind(address).await {
-            Ok(listener) => listener,
-            Err(error) => {
-                tracing::error!(
-                    %address,
-                    error_kind = "bootui_bind",
-                    "BootUI could not bind its configured address: {error}"
-                );
-                return;
-            }
-        };
-        tracing::info!(target: "scafra::startup", %address, path = %path, "Scafra BootUI started");
-        let service = prepared
-            .router
-            .into_make_service_with_connect_info::<SocketAddr>();
-        if let Err(error) = axum::serve(listener, service).await {
+        if scafra_web::serve_finalized_router_with_callbacks(
+            address,
+            policy,
+            router,
+            (|_| {}, || {}),
+        )
+        .await
+        .is_err()
+        {
             tracing::error!(
                 error_kind = "bootui_server",
-                "BootUI stopped unexpectedly: {error}"
+                "BootUI server stopped with an error"
             );
         }
     });
@@ -157,15 +261,15 @@ pub fn try_layer_with_config_and_profile(
     let snapshot = snapshot::BootUiSnapshot::from_config(config, profile);
     let dashboard = dashboard::router(snapshot, binding.protection);
     let path = config.bootui.path.trim_end_matches('/');
-    if path.is_empty() || !path.starts_with('/') {
-        return Err(BootUiPolicyError::InvalidPath);
-    }
+    config
+        .bootui
+        .validate_path()
+        .map_err(|_| BootUiPolicyError::InvalidPath)?;
     Ok(router.nest(path, dashboard))
 }
 
 struct PreparedBootUi {
     address: SocketAddr,
-    path: String,
     router: axum::Router,
 }
 
@@ -179,9 +283,10 @@ fn prepare(
 
     let binding = binding::resolve(&config.bootui, &config.security)?;
     let path = config.bootui.path.trim_end_matches('/');
-    if path.is_empty() || !path.starts_with('/') {
-        return Err(BootUiPolicyError::InvalidPath);
-    }
+    config
+        .bootui
+        .validate_path()
+        .map_err(|_| BootUiPolicyError::InvalidPath)?;
 
     let dashboard = dashboard::router(
         snapshot::BootUiSnapshot::from_config(config, profile),
@@ -189,7 +294,6 @@ fn prepare(
     );
     Ok(Some(PreparedBootUi {
         address: binding.address,
-        path: path.to_owned(),
         router: axum::Router::new().nest(path, dashboard),
     }))
 }

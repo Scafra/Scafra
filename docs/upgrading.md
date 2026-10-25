@@ -142,3 +142,75 @@ instead of a credential-oriented 401; standard startup validation and known
 hidden404 behavior remain intact. This is a deliberate pre-1.0 Rust/wire behavior
 correction. All valid authentication 401s keep the `unauthorized` classification,
 existing JSON and applicable challenges.
+
+## Configuration and resource protection (CFG-01)
+
+The coordinated 0.1.0 workspace remains pre-1.0. These changes intentionally
+tighten deployment defaults without changing package versions. Review them
+before upgrading an existing application.
+
+- Omitted `server.timeout` changes from unlimited to 30 seconds. Use
+  `server.timeout: null` explicitly for unlimited processing, or set 1–86400
+  seconds. Connection inactivity remains independently bounded. The alias
+  `server.request_timeout_seconds` is retained; duplicate aliases in one source
+  now fail instead of depending on deserialization order.
+- `ServerConfig`, `RouterOptions` and `JwtConfig` gain public fields;
+  `ScafraConfig` gains `shutdown`. Update exhaustive literals with
+  `..Default::default()` and use the canonical keys in the
+  [reference](configuration-reference.md). Standalone ServerConfig validation
+  now returns `ValidationError` rather than `Infallible`.
+- The former 1 MiB extractor limit is also a global streaming ceiling. Raising
+  a route extractor limit cannot remove it. Set an adequate global ceiling and
+  tighten individual routes with `with_request_body_limit`. Both that helper
+  and `with_request_timeout` return `Result` after validation. A longer local
+  deadline cannot remove an outer timer.
+- Managed serving now enforces header-read, transport inactivity, header
+  byte/count and connection/HTTP2-stream budgets. HTTP/2 support adds `h2` to
+  the web-only dependency closure. Finalized routers retain connection options;
+  converting to raw Axum transfers connection-policy ownership to the embedding
+  server. Existing serving signatures remain available.
+- `ShutdownConfig::policy()` feeds normal and startup-failure cleanup. Generated
+  graphs add `compose_async_with_policy(overrides, policy)` while preserving
+  existing default-policy composition functions. Regenerate with matching
+  crates; custom executors must still honor cooperative resource shutdown.
+- Actuator checked constructors now reject invalid deadlines, endpoint names
+  and blank enabled credentials. `HealthRegistryError` gains variants; review
+  exhaustive matches. Legacy infallible routes still fail closed. BootUI
+  rejects unsafe bind/auth and dynamic/invalid mount paths before nesting; its
+  policy error gains `InvalidServerConfiguration`. The standard runner now
+  owns its resource-protected listener. Standalone users can own
+  `start_managed_with_config`'s `BootUiServer` and await shutdown. The legacy
+  independent start helper uses its own signal boundary.
+- JWT verification retains signature/algorithm/expiry enforcement. Cache and
+  network timing and clock skew are configurable within validated bounds.
+  Review rotation overlap when changing TTL or leeway.
+- Development polling accepts `scafra dev --poll-interval-ms 750` or
+  `SCAFRA_DEV_POLL_INTERVAL_MS=750` (100–60000 ms). An explicit flag wins.
+
+No setting enables an unavailable Cargo feature. No live mutable configuration
+service is introduced; restart after changing runtime settings.
+
+Scheduler names keep their literal case and punctuation. Dotted properties
+paths use the final task property as separator; environment names can use
+`TASK_HEX_<exact-name-bytes>` for ambiguous names. Domain loaders are unaffected.
+Use `ConfigLoader::profile` or `SCAFRA_PROFILE` for runtime profile selection;
+late ordinary overrides of `scafra.profiles.active` now reject instead of being
+ignored. Enabled Basic configuration must contain both username and password,
+even when another authenticator is usable.
+
+## CFG-01 authoritative loader hook
+
+Existing entrypoints and runner signatures continue to work. Applications that
+previously loaded a separate config for overrides should instead pass their
+loader through `#[scafra::main(config_loader = crate::configured_loader)]`. For
+manual startup, `run_with_loader` and `run_with_loader_and_resources` accept it
+directly. This ensures that address, logging, scheduler, BootUI and shutdown
+consume the same validated result as router construction. The hook returns a
+`ConfigLoader`, runs once after the original entry body, and preserves the
+existing source precedence. See the [reference](configuration-reference.md#equivalent-examples).
+
+Unknown macro options now fail rather than being silently ignored. Loader
+`Debug` output omits all override names and values; use typed assertions to test
+configuration rather than inspecting diagnostic strings. Bind-failure cleanup
+now requests resource cancellation before waiting for active scheduled jobs;
+resource owners must continue to make cancellation requests idempotent.

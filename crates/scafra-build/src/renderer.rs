@@ -78,8 +78,8 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
         output.push_str("        pub fn build_router(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> { let (result, _) = self.build_router_and_resources(actuator, security, request_timeout); result }\n");
         output.push_str("        pub fn build_router_with_health_registry(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, health_registry: ::scafra::HealthRegistry, request_timeout: Option<::std::time::Duration>) -> Result<::scafra::web::axum::Router, ::scafra::web::WebError> { let (result, _) = self.build_router_with_health_registry_and_resources(actuator, security, health_registry, request_timeout); result }\n");
     }
-    output.push_str("        pub fn build_router_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { self.build_router_with_options_and_resources(&::scafra::web::RouterOptions { actuator: actuator.clone(), security: security.clone(), request_timeout }) }\n");
-    output.push_str("        pub fn build_router_with_health_registry_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, health_registry: ::scafra::HealthRegistry, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { let options = ::scafra::web::RouterOptions { actuator: actuator.clone(), security: security.clone(), request_timeout }; match ::scafra::actuator::router_with_health_registry(actuator, health_registry) { Ok(router) => self.build_router_with_options_router_and_resources(router, &options), Err(error) => { let resources = self.into_resources(); (Err(error.into()), resources) } } }\n        }\n");
+    output.push_str("        pub fn build_router_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { self.build_router_with_options_and_resources(&::scafra::web::RouterOptions { actuator: actuator.clone(), security: security.clone(), request_timeout, ..Default::default() }) }\n");
+    output.push_str("        pub fn build_router_with_health_registry_and_resources(self, actuator: &::scafra::ActuatorConfig, security: &::scafra::SecurityConfig, health_registry: ::scafra::HealthRegistry, request_timeout: Option<::std::time::Duration>) -> (Result<::scafra::web::axum::Router, ::scafra::web::WebError>, Resources) { let options = ::scafra::web::RouterOptions { actuator: actuator.clone(), security: security.clone(), request_timeout, ..Default::default() }; match ::scafra::actuator::router_with_health_registry(actuator, health_registry) { Ok(router) => self.build_router_with_options_router_and_resources(router, &options), Err(error) => { let resources = self.into_resources(); (Err(error.into()), resources) } } }\n        }\n");
     output.push_str("        pub fn into_resources(self) -> Resources { Resources {\n");
     for index in &resource_indices {
         output.push_str(&format!(
@@ -178,7 +178,8 @@ pub(crate) fn render_graph(model: &GraphModel, output: &mut String) {
         render_compose(model, false, output);
     }
     output.push_str("    pub async fn compose_async() -> Result<Graph, ::scafra::core::GraphError> { compose_async_with(Overrides::default()).await }\n\n");
-    output.push_str("    pub async fn compose_async_with(overrides: Overrides) -> Result<Graph, ::scafra::core::GraphError> { compose_async_inner(overrides).await }\n\n");
+    output.push_str("    pub async fn compose_async_with(overrides: Overrides) -> Result<Graph, ::scafra::core::GraphError> { compose_async_with_policy(overrides, ::scafra::ShutdownPolicy::default()).await }\n\n");
+    output.push_str("    pub async fn compose_async_with_policy(overrides: Overrides, policy: ::scafra::ShutdownPolicy) -> Result<Graph, ::scafra::core::GraphError> { compose_async_inner(overrides, policy).await }\n\n");
     render_compose(model, true, output);
     output.push_str("}\n");
 }
@@ -220,7 +221,7 @@ fn render_compose(model: &GraphModel, asynchronous: bool, output: &mut String) {
         "compose_inner"
     };
     if asynchronous {
-        output.push_str(&format!("    async fn {name}(mut overrides: Overrides) -> Result<Graph, ::scafra::core::GraphError> {{\n            let _plan = descriptor().plan()?;\n"));
+        output.push_str(&format!("    async fn {name}(mut overrides: Overrides, _policy: ::scafra::ShutdownPolicy) -> Result<Graph, ::scafra::core::GraphError> {{\n            let _plan = descriptor().plan()?;\n"));
     } else {
         output.push_str(&format!("    fn {name}(mut overrides: Overrides) -> Result<Graph, ::scafra::core::GraphError> {{\n        let _plan = descriptor().plan()?;\n"));
     }
@@ -286,7 +287,7 @@ fn render_compose(model: &GraphModel, asynchronous: bool, output: &mut String) {
                         format!("&node_{prior}")
                     };
                     output.push_str(&format!(
-                        "                        ::scafra::core::AsyncResource::request_shutdown({target}, ::scafra::ShutdownReason::StartupFailure);\n                        if let Err(error) = ::scafra::core::AsyncResource::shutdown({target}, ::scafra::ShutdownReason::StartupFailure, ::scafra::ShutdownPolicy::default()).await {{ cleanup_failures.push(::scafra::core::ProviderFailure::cleanup_failure({}, {}, error)); }}\n",
+                        "                        ::scafra::core::AsyncResource::request_shutdown({target}, ::scafra::ShutdownReason::StartupFailure);\n                        if let Err(error) = ::scafra::core::AsyncResource::shutdown({target}, ::scafra::ShutdownReason::StartupFailure, _policy).await {{ cleanup_failures.push(::scafra::core::ProviderFailure::cleanup_failure({}, {}, error)); }}\n",
                         rust_string(&prior_node.provider),
                         rust_string(&prior_node.source)
                     ));

@@ -13,6 +13,14 @@ pub use tracing;
 
 /// Runs the embedded debug supervisor used by ordinary `cargo run`.
 pub fn run_dev_supervisor(manifest_dir: &str, executable: PathBuf) -> i32 {
+    let environment = std::env::var_os("SCAFRA_DEV_POLL_INTERVAL_MS");
+    let poll_interval = match dev_poll_interval(environment.as_deref()) {
+        Ok(interval) => interval,
+        Err(message) => {
+            eprintln!("{message}");
+            return 1;
+        }
+    };
     let root = Path::new(manifest_dir);
     let mut snapshot = match dev_snapshot(root) {
         Ok(snapshot) => snapshot,
@@ -31,7 +39,7 @@ pub fn run_dev_supervisor(manifest_dir: &str, executable: PathBuf) -> i32 {
     println!("Scafra dev reload: watching src, Cargo.toml, Cargo.lock, and resources");
 
     loop {
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(poll_interval);
         let current = match dev_snapshot(root) {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -64,6 +72,20 @@ pub fn run_dev_supervisor(manifest_dir: &str, executable: PathBuf) -> i32 {
             }
         };
     }
+}
+
+fn dev_poll_interval(value: Option<&std::ffi::OsStr>) -> Result<Duration, &'static str> {
+    let Some(value) = value else {
+        return Ok(Duration::from_millis(500));
+    };
+    let milliseconds = value
+        .to_str()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| (100..=60000).contains(value))
+        .ok_or(
+            "SCAFRA_DEV_POLL_INTERVAL_MS must be an integer between 100 and 60000 milliseconds",
+        )?;
+    Ok(Duration::from_millis(milliseconds))
 }
 
 fn spawn_dev_child(executable: &Path) -> std::io::Result<Child> {
@@ -236,5 +258,37 @@ fn log_resource_cleanup_failures(failures: &[scafra_core::ProviderFailure]) {
             source = failure.source_location(),
             "application_resource_cleanup_failed"
         );
+    }
+}
+
+#[cfg(test)]
+mod dev_poll_tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn development_polling_uses_validated_environment_or_default() {
+        assert_eq!(dev_poll_interval(None), Ok(Duration::from_millis(500)));
+        for milliseconds in [100, 750, 60000] {
+            assert_eq!(
+                dev_poll_interval(Some(OsStr::new(&milliseconds.to_string()))),
+                Ok(Duration::from_millis(milliseconds))
+            );
+        }
+        for invalid in [
+            "0",
+            "99",
+            "60001",
+            "-1",
+            "18446744073709551616",
+            "secret-value",
+        ] {
+            let error = dev_poll_interval(Some(OsStr::new(invalid))).unwrap_err();
+            assert_eq!(
+                error,
+                "SCAFRA_DEV_POLL_INTERVAL_MS must be an integer between 100 and 60000 milliseconds"
+            );
+            assert!(!error.contains("secret-value"));
+        }
     }
 }

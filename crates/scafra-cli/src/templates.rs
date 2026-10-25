@@ -40,8 +40,7 @@ pub(crate) fn template_files(
     };
     let scafra_dependency =
         format!("{source}, default-features = false, features = [{selected}] }}");
-    let mut configuration =
-        "server:\n  host: 127.0.0.1\n  port: 8080\nlogging:\n  level: info\n".to_owned();
+    let mut configuration = "server:\n  host: 127.0.0.1\n  port: 8080\n  timeout: 30\n  max_request_body_bytes: 1048576\n  header_read_timeout_seconds: 10\n  idle_timeout_seconds: 60\n  max_connections: 1024\n  max_header_bytes: 32768\n  http1_keep_alive: true\nshutdown:\n  grace_period_seconds: 30\n  force_after_grace: true\nlogging:\n  level: info\n  backtrace: off\n".to_owned();
     let remote_jwt = features
         .iter()
         .any(|feature| matches!(feature, Capability::Jwks | Capability::Standard));
@@ -343,8 +342,18 @@ For the example request above, the current sample response is:
 ```
 
 The generated `src/resources/application.yaml` keeps Scafra's current defaults: it binds to
-`127.0.0.1:8080` and logs at `info`. `SCAFRA_SERVER_PORT=9000 cargo run` is the
-existing environment override.
+`127.0.0.1:8080` and logs at `info`. Requests have a 30-second processing deadline
+and a 1 MiB body ceiling, including raw request streams. The managed server also
+uses a 10-second HTTP/1 header-read deadline, 60-second transport inactivity
+deadline, 1024 concurrent connections, and a 32 KiB header budget.
+`SCAFRA_SERVER_PORT=9000 cargo run` changes the bind port.
+`SCAFRA_SERVER__MAX_REQUEST_BODY_BYTES=10485760 cargo run` changes the body ceiling.
+Use `server.timeout: null` only when an intentionally unlimited handler deadline
+is required. Response streaming and non-cooperative blocking work are outside
+that deadline. Shutdown allows 30 seconds for HTTP draining; synchronous callbacks
+cannot be force-stopped safely. See the framework's
+[configuration reference](https://github.com/Scafra/Scafra/blob/main/docs/configuration-reference.md)
+for bounds, override precedence, route ceilings, and timeout scope.
 
 From the project directory, the standard runner reads `src/resources/`
 automatically. When starting the executable from another working directory,
@@ -364,6 +373,11 @@ Scafra uses typed defaults and the environment overrides.
 The `scafra dev` watcher accepts `--config-dir DIR` or `--config-file FILE`.
 These paths are resolved from the directory where the CLI was invoked, passed
 to the application process, and watched for changes.
+It polls every 500 milliseconds. Use `scafra dev --poll-interval-ms 750` or
+`SCAFRA_DEV_POLL_INTERVAL_MS=750 scafra dev` to change this tool setting
+(100 through 60000 milliseconds); the flag takes precedence. The environment
+control also applies to embedded reload during ordinary debug `cargo run`.
+Polling belongs to the development supervisor and is not an application YAML key.
 
 ## What was generated
 

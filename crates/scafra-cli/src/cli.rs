@@ -119,6 +119,10 @@ pub(crate) enum CommandKind {
         /// Select one required YAML, YML, or properties configuration file.
         #[arg(long, value_name = "FILE", conflicts_with = "config_dir")]
         config_file: Option<PathBuf>,
+        /// Watch interval in milliseconds (100..=60000); defaults to 500.
+        /// Overrides SCAFRA_DEV_POLL_INTERVAL_MS.
+        #[arg(long, value_name = "MILLISECONDS", allow_hyphen_values = true)]
+        poll_interval_ms: Option<String>,
     },
     /// Check the current application through Cargo.
     Check,

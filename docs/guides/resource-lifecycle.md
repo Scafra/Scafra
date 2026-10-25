@@ -94,7 +94,7 @@ detaching tasks and should make their in-flight operations cancellation-safe.
 
 On shutdown, Scafra requests scheduler and resource cancellation before HTTP
 request draining begins. The listener stops accepting new connections while
-Axum drains active requests according to `ShutdownPolicy`. After the server
+the managed HTTP server drains active requests according to `ShutdownPolicy`. After the server
 finishes draining, Scafra waits for scheduler callbacks, runs application
 shutdown hooks in reverse hook order, and then awaits async resource teardown
 in reverse dependency order.
@@ -186,3 +186,22 @@ The SQLite example demonstrates async setup and teardown. PostgreSQL-specific
 configuration, pool policy, and real-server tests remain in
 [issue #46](https://github.com/Scafra/Scafra/issues/46); that integration can
 use the same local-wrapper provider contract.
+
+## Resolved shutdown policy
+
+The standard runner and generated partial-startup cleanup use
+`config.shutdown.policy()`: grace30 seconds and force-after-grace true by
+default. Configure `shutdown.grace_period_seconds` and `shutdown.force_after_grace`
+through the usual loader sources. HTTP and the owned BootUI listener drain
+cooperatively; resource implementations receive the same policy. This is not
+a single whole-process deadline. Synchronous lifecycle hooks and scheduled
+callbacks cannot be safely preempted; scheduler shutdown preserves ownership
+and joins them. Custom graph composition can pass a policy to
+`compose_async_with_policy`. See the [reference](../configuration-reference.md).
+
+A caller-supplied loader reaches the same ownership path through
+`run_with_loader_and_resources` or
+`#[scafra::main(config_loader = crate::configured_loader)]`. Server startup
+errors stop scheduler dispatch and request dependency cancellation before joins,
+including bind failures before the signal shutdown callback has run. See the
+[configuration reference](../configuration-reference.md#equivalent-examples).

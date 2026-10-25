@@ -14,11 +14,13 @@ pub enum BootUiPolicyError {
     LoopbackRequired,
     AuthenticationRequired,
     InvalidSecurityConfiguration,
+    InvalidServerConfiguration,
 }
 
 impl fmt::Display for BootUiPolicyError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
+            Self::InvalidServerConfiguration => "BootUI server resource configuration is invalid",
             Self::InvalidHost => "bootui.host must be an IPv4 or IPv6 address literal",
             Self::InvalidPort => "bootui.port must be greater than zero",
             Self::InvalidPath => "bootui.path must be a non-root absolute path",

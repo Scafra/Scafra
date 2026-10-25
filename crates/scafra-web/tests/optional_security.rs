@@ -136,7 +136,7 @@ fn explicitly_configured_jwt_is_rejected_even_when_security_disabled() {
     let mut options = RouterOptions::default();
     options.security.jwt.enabled = true;
     let error = finish_router_with_options(Router::new(), &[], &options).unwrap_err();
-    assert!(error.to_string().contains("jwt"));
+    assert!(error.to_string().to_ascii_lowercase().contains("jwt"));
 }
 
 #[test]

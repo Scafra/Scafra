@@ -42,8 +42,8 @@ impl SecurityContext {
     fn new(config: SecurityConfig) -> Self {
         Self(Arc::new(SecurityState {
             invalid_configuration: config.validate().is_err(),
+            jwks: JwksCache::new(&config.jwt),
             config,
-            jwks: JwksCache::new(),
         }))
     }
 

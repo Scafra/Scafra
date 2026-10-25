@@ -8,6 +8,10 @@ Axum, Tokio, Tower, Serde, and `tracing`.
 
 ## Start here
 
+- [Configuration reference](configuration-reference.md) — canonical defaults, bounds and effective consumers.
+- [Configuration audit](architecture/configurability-audit.md) — all twelve crates and justified exceptions.
+- [CFG-01 review](architecture/cfg-01-final-review.md) — implementation and executed verification.
+
 - [API stability and compatibility](api-stability.md) — proposed 1.0 contract, API inventory, versions, features, MSRV and targets.
 - [Upgrading](upgrading.md) — capability, source and runtime migration.
 

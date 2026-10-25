@@ -56,9 +56,14 @@ pub fn routes(_attr: TokenStream, item: TokenStream) -> TokenStream {
     diagnostics::into_token_stream(routes::expand_routes(_attr, item))
 }
 
+/// Starts a generated Scafra application.
+///
+/// `config_loader = path::to::function` selects a synchronous, zero-argument
+/// function returning `scafra::ConfigLoader`. It runs once after the async main
+/// body, before the framework loads and validates configuration.
 #[proc_macro_attribute]
-pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    diagnostics::into_token_stream(main_macro::expand_main(item.into()))
+pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
+    diagnostics::into_token_stream(main_macro::expand_main(attr.into(), item.into()))
 }
 
 /// Adds structured logging spans to functions and impl methods.
@@ -105,7 +110,8 @@ mod tests {
             .to_string();
 
         assert!(expanded.contains("log_startup_failure"));
-        assert!(expanded.contains("run_with_finalized_resources"));
+        assert!(expanded.contains("run_with_loader_and_resources"));
+        assert!(expanded.contains(":: scafra :: ConfigLoader :: new ()"));
         assert!(expanded.contains("__scafra_graph :: compose_async"));
         assert!(!expanded.contains("% error"));
         assert!(!expanded.contains("Scafra application failed"));
@@ -119,8 +125,64 @@ mod tests {
         let expanded = expand_main_item(input)
             .expect("valid main should expand")
             .to_string();
-        assert!(expanded.contains("build_router_with_options_and_resources"));
+        assert!(expanded.contains("build_finalized_router_with_options_and_resources"));
         assert!(expanded.contains("AsyncResourceSet :: shutdown"));
         assert!(expanded.contains("StartupFailure"));
+    }
+
+    #[test]
+    fn main_loader_hook_is_called_once_after_the_user_body() {
+        let expanded = super::main_macro::expand_main(
+            quote::quote!(config_loader = crate::configured_loader,),
+            quote::quote!(
+                async fn main() {
+                    user_initialization();
+                }
+            ),
+        )
+        .expect("a function path should expand")
+        .to_string();
+        assert_eq!(expanded.matches("crate :: configured_loader ()").count(), 1);
+        assert!(
+            expanded.find("user_initialization ()").unwrap()
+                < expanded.find("crate :: configured_loader ()").unwrap()
+        );
+        assert!(expanded.contains("run_with_loader_and_resources (crate :: configured_loader ()"));
+    }
+
+    #[test]
+    fn main_loader_options_reject_unknown_duplicate_and_non_path_values() {
+        for (options, diagnostic) in [
+            (
+                quote::quote!(loader = configure),
+                "unknown scafra::main option",
+            ),
+            (
+                quote::quote!(config_loader = a, config_loader = b),
+                "duplicate config_loader option",
+            ),
+            (
+                quote::quote!(config_loader = configure()),
+                "config_loader requires a function path",
+            ),
+            (
+                quote::quote!(config_loader = "configure"),
+                "config_loader requires a function path",
+            ),
+            (
+                quote::quote!(config_loader = || configure()),
+                "config_loader requires a function path",
+            ),
+            (quote::quote!(config_loader), "expected `=`"),
+        ] {
+            let error = super::main_macro::expand_main(
+                options,
+                quote::quote!(
+                    async fn main() {}
+                ),
+            )
+            .expect_err("invalid options must be rejected");
+            assert!(error.to_string().contains(diagnostic), "{error}");
+        }
     }
 }

@@ -703,7 +703,7 @@ server:
   host: 127.0.0.1
   port: 8080
   # Optional; unset keeps the historical unlimited processing time.
-  timeout: 30 # optional request-processing deadline in seconds
+  timeout: 30 # request-processing seconds; explicit null disables
 logging:
   level: info
   backtrace: off
@@ -778,17 +778,16 @@ redacted. For custom router composition, use
 configuration value. The compatibility `layer` helper uses the standard
 loader, so custom applications should prefer the checked config-taking API.
 
-`server.timeout` (also `SCAFRA_SERVER_TIMEOUT`) sets an optional
-request-processing deadline in seconds. It must be greater than zero
-when set. When the deadline expires, Scafra cancels the in-flight request
+`server.timeout` (also `SCAFRA_SERVER_TIMEOUT`) defaults to a 30-second
+request-processing deadline. Valid values are 1–86400 seconds; explicit YAML
+`null` deliberately disables this processing timer. When the deadline expires, Scafra cancels the in-flight request
 future and returns `504 Gateway Timeout` with the JSON error code
 `request_timeout` (see [HTTP API errors](docs/http-errors.md)). The deadline
 covers security middleware, request body extraction, and handler processing
 until the response is created. It does not cover establishing a connection or
 receiving request headers, and it ends when the handler returns the response;
 streaming response bodies can continue afterward. Cancellation does not undo
-external side effects the handler already performed. An unset value preserves
-the existing no-deadline behavior. Scafra uses 504 to identify this server-side
+external side effects the handler already performed. An omitted value keeps the finite default. Scafra uses 504 to identify this server-side
 processing deadline; 408 describes the server waiting for the client to finish
 sending its request.
 
@@ -824,8 +823,10 @@ design boundaries. Generated behavior is described in
 ## Security defaults
 
 The default listener binds to '127.0.0.1:8080', not all interfaces. Scafra
-installs a 1 MiB default request body limit and request tracing without logging
-request bodies.
+installs a configurable 1 MiB streaming request-body ceiling, a 30-second
+processing deadline, bounded managed connections and request tracing without
+logging request bodies. See the [configuration reference](docs/configuration-reference.md)
+for all keys, override sources, validation and streaming response boundaries.
 
 ## License
 

@@ -3,7 +3,8 @@
 pub use scafra_config as config;
 pub use scafra_config::{
     BootUiConfig, Config, ConfigCapabilities, ConfigError, ConfigLoader, ConfigProperties,
-    LoggingConfig, Properties, ScafraConfig, ServerConfig, StartupConfig, ValidationError,
+    LoggingConfig, Properties, ScafraConfig, ServerConfig, ShutdownConfig, StartupConfig,
+    ValidationError,
 };
 pub use scafra_core as core;
 pub use scafra_core::{
@@ -67,8 +68,8 @@ pub type Result<T> = std::result::Result<T, AppError>;
 mod startup;
 #[cfg(feature = "web")]
 pub use startup::{
-    router_options, run, run_with_finalized_resources, run_with_finalized_router,
-    run_with_resources, run_with_router,
+    router_options, run, run_with_finalized_resources, run_with_finalized_router, run_with_loader,
+    run_with_loader_and_resources, run_with_resources, run_with_router,
 };
 #[doc(hidden)]
 #[path = "private.rs"]

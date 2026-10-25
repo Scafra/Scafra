@@ -12,10 +12,12 @@
 //! supported when selected. Authentication and authorization failures are denied; malformed
 //! or unsupported credentials do not grant access. Shared bearer and Basic
 //! credentials authenticate requests but do not provide roles or scopes.
-//! Remote RSA keys are cached per router state for five minutes. Unknown `kid`
-//! values trigger a bounded refresh, with a 30-second cooldown, and expired
+//! By default remote RSA keys are cached per router state for five minutes. Unknown `kid`
+//! values trigger a bounded refresh, with a 30-second default cooldown, and expired
 //! keys are never used after a failed refresh. Discovery and JWKS requests have
-//! bounded timeouts and response sizes.
+//! configurable bounded timeouts and a fixed maximum response size. These
+//! operational policies are configured through [`JwtConfig`]; signature and
+//! required-claim validation remain mandatory.
 //! Credential-bearing configuration types redact tokens, usernames, passwords,
 //! HMAC secrets, and issuer/JWKS URLs from their `Debug` output.
 //! When application security is enabled, configured bearer tokens must not be
@@ -41,7 +43,7 @@ mod jwks {
     // No cache or HTTP client is created for local authentication.
     pub(super) struct JwksCache;
     impl JwksCache {
-        pub(super) fn new() -> Self {
+        pub(super) fn new(_config: &crate::config::JwtConfig) -> Self {
             Self
         }
     }
